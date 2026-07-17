@@ -1,0 +1,29 @@
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_session
+from app.core.security import get_current_user_id
+from app.services.image_service import image_service
+
+router = APIRouter(prefix="/image", tags=["image"])
+
+
+@router.get("/avatar")
+async def get_avatar(
+    user_id: str = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_session),
+):
+    """校验 Authorization 后，返回当前用户可访问的头像图片。"""
+    image_path = await image_service.get_avatar_image_path(
+        user_id=user_id,
+        session=session,
+    )
+    if not image_path.is_file():
+        raise HTTPException(status_code=404, detail="头像文件不存在")
+
+    return FileResponse(
+        path=image_path,
+        media_type="image/jpeg",
+        filename=image_path.name,
+    )

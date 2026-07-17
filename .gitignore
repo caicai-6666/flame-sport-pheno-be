@@ -1,0 +1,19 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+
+# 虚拟环境
+.venv/
+venv/
+
+# 本地环境变量
+.env
+
+# 运行期资源文件
+# 实际图片等资源由 assets/.gitignore 控制，不提交到 Git。
+assets/**
+!assets/
+!assets/.gitignore
+!assets/.gitkeep
+!assets/images/
+!assets/images/.gitkeep

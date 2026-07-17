@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+sqlmodel
+asyncmy
+pydantic-settings
+greenlet
