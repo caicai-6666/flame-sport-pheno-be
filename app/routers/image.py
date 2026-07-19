@@ -9,6 +9,12 @@ from app.services.image_service import image_service
 router = APIRouter(prefix="/image", tags=["image"])
 
 
+@router.get("")
+async def check_image_router():
+    """图片子路由存活校验。"""
+    return {"code": 200}
+
+
 @router.get("/avatar")
 async def get_avatar(
     user_id: str = Depends(get_current_user_id),

@@ -9,7 +9,7 @@ from app.core.auth_cache import (
 )
 from app.core.config import settings
 from app.core.storage import ensure_asset_directories
-from app.routers import auth, health, image
+from app.routers import auth, health, image, project, season
 
 
 @asynccontextmanager
@@ -35,6 +35,8 @@ def create_app() -> FastAPI:
     application.include_router(auth.router)
     application.include_router(health.router)
     application.include_router(image.router)
+    application.include_router(project.router)
+    application.include_router(season.router)
     return application
 
 

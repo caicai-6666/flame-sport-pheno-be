@@ -1,10 +1,20 @@
-# 1. 构建 MySQL 镜像
+# MySQL Docker 说明
+
+## 构建镜像
+
+```bash
 docker build -f Dockerfile.mysql -t flame-winter-pheno-mysql:8.4 .
+```
 
-# 2. 创建数据卷
+## 创建数据卷
+
+```bash
 docker volume create flame-winter-pheno-mysql-data
+```
 
-# 3. 启动容器，映射到本机 3307 端口
+## 启动容器
+
+```bash
 docker run -d \
   --name flame-winter-pheno-mysql \
   --restart unless-stopped \
@@ -15,11 +25,17 @@ docker run -d \
   -e MYSQL_USER=flame \
   -e MYSQL_PASSWORD=flame123456 \
   flame-winter-pheno-mysql:8.4
+```
 
-本地连接参数：
+## 本地连接参数
+
+```text
 host: 127.0.0.1
 port: 3307
 database: flame_winter_pheno
 user: flame
 password: flame123456
 root password: root123456
+```
+
+默认后端配置中的 `DATABASE_URL` 与上述连接参数一致。

@@ -4,18 +4,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_session
 from app.services.auth_service import auth_service
 
-router = APIRouter(tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.get("")
+async def check_auth_router():
+    """鉴权子路由存活校验。"""
+    return {"code": 200}
 
 
 @router.post("/login")
 async def login(
-    access_token: str = Body(..., embed=True),
+    auth_code: str = Body(..., embed=True),
     session: AsyncSession = Depends(get_session),
 ):
-    """根据 access_token 解析用户，验证用户存在后写入认证缓存。"""
-    _ = await auth_service.login_with_access_token(
-        access_token=access_token,
+    """根据 auth_code 解析用户，验证用户存在后写入认证缓存。"""
+    auth_code = await auth_service.login_with_auth_code(
+        auth_code=auth_code,
         session=session,
     )
 
-    return {"access_token": access_token}
+    return {"auth_code": auth_code}

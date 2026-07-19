@@ -13,13 +13,14 @@
 
 ## 字段说明
 
-| 字段名     | 类型             | 是否必填 | 默认值 | 说明                                         |
-| ---------- | ---------------- | -------: | -----: | -------------------------------------------- |
-| id         | BIGINT UNSIGNED  |       是 |   自增 | 赛季主键 ID                                  |
-| name       | VARCHAR(64)      |       是 |     无 | 赛季名称，例如“2026年7月赛季”                |
-| start_date | DATE             |       是 |     无 | 赛季开始日期                                 |
-| end_date   | DATE             |       是 |     无 | 赛季结束日期                                 |
-| status     | TINYINT UNSIGNED |       是 |      0 | 赛季状态：`0` 未开始，`1` 进行中，`2` 已结束 |
+| 字段名     | 类型             | 是否必填 | 默认值 | 说明                                               |
+| ---------- | ---------------- | -------: | -----: | -------------------------------------------------- |
+| id         | BIGINT UNSIGNED  |       是 |   自增 | 赛季主键 ID                                        |
+| name       | VARCHAR(64)      |       是 |     无 | 赛季名称，例如“2026年7月赛季”                      |
+| start_date | DATE             |       是 |     无 | 赛季开始日期                                       |
+| end_date   | DATE             |       是 |     无 | 赛季结束日期                                       |
+| required_project_count | TINYINT UNSIGNED |       是 |      3 | 当前赛季要求用户固定选择的项目数量                 |
+| status     | TINYINT UNSIGNED |       是 |      0 | 赛季状态：`0` 未开始，`1` 进行中，`2` 已结束       |
 
 ---
 
@@ -84,6 +85,31 @@ exchange_order.season_id
 ```
 ---
 
+### required_project_count
+
+当前赛季要求用户固定选择的项目数量。
+
+例如：
+
+```text
+required_project_count = 3 表示该赛季强制选择 3 个运动项目
+required_project_count = 4 表示该赛季强制选择 4 个运动项目
+```
+
+该字段用于控制用户赛季参与流程：
+
+- 用户锁定项目数量达到 `required_project_count` 后，才满足当前赛季参与条件
+- 后续赛季结算时，只统计 `season_user.status >= season.required_project_count` 的用户
+- 前端项目首页可以根据该字段展示“已锁定 N / required_project_count”
+
+当前原型中，赛季项目固定数为：
+
+```text
+required_project_count = 3
+```
+
+---
+
 ### status
 
 赛季状态。
@@ -134,6 +160,21 @@ status = 1
 
 ---
 
+### 赛季项目固定数由 required_project_count 控制
+
+不同赛季可以要求用户选择不同数量的运动项目。
+
+例如：
+
+```text
+2026年7月赛季：required_project_count = 3
+2026年8月赛季：required_project_count = 4
+```
+
+后端在用户锁定项目、选择挑战等级和赛季结算时，都应以当前赛季的 `required_project_count` 为准。
+
+---
+
 ## MySQL 建表语句
 
 ```sql
@@ -142,6 +183,7 @@ CREATE TABLE season (
   name VARCHAR(64) NOT NULL COMMENT '赛季名称',
   start_date DATE NOT NULL COMMENT '赛季开始日期',
   end_date DATE NOT NULL COMMENT '赛季结束日期',
+  required_project_count TINYINT UNSIGNED NOT NULL DEFAULT 3 COMMENT '当前赛季要求选择的项目数量',
   status TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '状态：0未开始，1进行中，2已结束',
   PRIMARY KEY (id),
   KEY idx_season_status (status),

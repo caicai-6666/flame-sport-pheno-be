@@ -4,3 +4,4 @@ sqlmodel
 asyncmy
 pydantic-settings
 greenlet
+python-multipart

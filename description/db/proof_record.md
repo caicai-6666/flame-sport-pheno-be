@@ -9,6 +9,9 @@
 
 当前设计中，一次上传只对应一张图片，因此图片路径直接存储在本表中，不单独设计图片文件表。
 
+本表不单独存储 BMI。  
+减重挑战中，BMI 应根据用户表中的身高和体重凭证中的体重信息计算得到，不作为通用凭证字段存储。
+
 ---
 
 ## 字段说明
@@ -18,13 +21,13 @@
 | id             | BIGINT UNSIGNED  |       是 |        自增 | 凭证记录主键 ID                        |
 | season_user_id | BIGINT UNSIGNED  |       是 |          无 | 赛季用户记录 ID，关联 `season_user.id` |
 | project_id     | BIGINT UNSIGNED  |       是 |          无 | 项目 ID，关联 `project.id`             |
-| record_type    | VARCHAR(32)      |       是 | daily-proof | 凭证类型                               |
+| project_upload_config_id | BIGINT UNSIGNED | 是 | 无 | 项目上传配置 ID，关联 `project_upload_config.id` |
 | image_url      | VARCHAR(500)     |       是 |          无 | 上传图片路径                           |
 | note           | VARCHAR(255)     |       否 |        NULL | 用户备注                               |
-| bmi            | DECIMAL(4,1)     |       否 |        NULL | BMI 值，主要用于减重挑战               |
 | review_status  | VARCHAR(32)      |       是 |     pending | 审核状态                               |
 | review_comment | VARCHAR(500)     |       否 |        NULL | 审核评论，用于后台人员填写审核说明     |
 | status         | TINYINT UNSIGNED |       是 |           1 | 记录状态：`1` 正常，`0` 无效/删除      |
+| created_at     | DATETIME         |       是 | CURRENT_TIMESTAMP | 上传时间                         |
 
 ---
 
@@ -78,32 +81,41 @@ season_user_project.status = 1
 ```
 ---
 
-### record_type
+### project_upload_config_id
 
-凭证类型。
+项目上传配置 ID。
 
-建议取值：
+该字段关联 `project_upload_config.id`，用于标识本条凭证是按照哪一条上传配置提交的。
+
+上传配置中维护：
+
 ```text
-daily-proof
-month-start
-month-end
+project_id
+record_type
+upload_hint
+note_example
+sort_order
+status
 ```
-含义如下：
+
+因此 `proof_record` 不再单独存储 `record_type` 字符串，而是通过 `project_upload_config_id` 关联到具体的凭证类型配置。
+
+这样设计的原因：
+
+- 避免用户上传记录只依赖凭证类型文本
+- 避免不同项目下相同 `record_type` 字符串产生歧义
+- 避免凭证类型文案调整时破坏历史关联
+- 让数据库层直接约束凭证类型必须来自已有上传配置
+
+上传凭证时，后端应校验：
+
 ```text
-daily-proof = 普通运动凭证
-month-start = 月初体重凭证
-month-end   = 月末体重凭证
+project_upload_config.id = 用户提交的 project_upload_config_id
+project_upload_config.project_id = 当前 project_id
+project_upload_config.status = 1
 ```
-普通运动项目通常使用：
-```text
-daily-proof
-```
-减重挑战可以使用：
-```text
-month-start
-month-end
-```
-用于区分月初体重记录和月末体重记录。
+
+校验通过后，才能写入 `proof_record.project_upload_config_id`。
 
 ---
 
@@ -141,22 +153,6 @@ MySQL 存储图片路径
 今日累计 8612 步，通勤和饭后散步完成。
 ```
 该字段允许为空。
-
----
-
-### bmi
-
-BMI 值。
-
-该字段主要用于“减重挑战”。
-
-例如：
-```text
-23.8
-24.1
-22.9
-```
-普通运动项目不需要填写 BMI，因此该字段允许为空。
 
 ---
 
@@ -223,27 +219,48 @@ rejected
 
 ---
 
+### created_at
+
+上传时间。
+
+该字段用于记录用户提交凭证的时间。
+
+用途包括：
+
+- 历史记录按上传时间倒序展示
+- 判断凭证是否属于当前赛季周期
+- 排行榜按当前赛季上传次数统计
+- 后台审核时查看凭证提交时间
+
+该字段由数据库默认写入当前时间。
+
+---
+
 ## MySQL 建表语句
 ```sql
 CREATE TABLE proof_record (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '凭证记录ID',
   season_user_id BIGINT UNSIGNED NOT NULL COMMENT '赛季用户记录ID',
   project_id BIGINT UNSIGNED NOT NULL COMMENT '项目ID',
-  record_type VARCHAR(32) NOT NULL DEFAULT 'daily-proof' COMMENT '凭证类型：daily-proof普通凭证，month-start月初体重，month-end月末体重',
+  project_upload_config_id BIGINT UNSIGNED NOT NULL COMMENT '项目上传配置ID',
   image_url VARCHAR(500) NOT NULL COMMENT '上传图片路径',
   note VARCHAR(255) DEFAULT NULL COMMENT '用户备注',
-  bmi DECIMAL(4,1) DEFAULT NULL COMMENT 'BMI值，主要用于减重挑战',
   review_status VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT '审核状态：pending待审核，approved通过，rejected拒绝',
   review_comment VARCHAR(500) DEFAULT NULL COMMENT '审核评论，用于后台人员填写审核说明',
   status TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '状态：1正常，0无效/删除',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
   PRIMARY KEY (id),
   KEY idx_proof_record_season_user_id (season_user_id),
   KEY idx_proof_record_project_id (project_id),
+  KEY idx_proof_record_project_upload_config_id (project_upload_config_id),
   KEY idx_proof_record_review_status (review_status),
   KEY idx_proof_record_status (status),
+  KEY idx_proof_record_created_at (created_at),
   CONSTRAINT fk_proof_record_season_user
     FOREIGN KEY (season_user_id) REFERENCES season_user(id),
   CONSTRAINT fk_proof_record_project
-    FOREIGN KEY (project_id) REFERENCES project(id)
+    FOREIGN KEY (project_id) REFERENCES project(id),
+  CONSTRAINT fk_proof_record_project_upload_config
+    FOREIGN KEY (project_upload_config_id) REFERENCES project_upload_config(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='凭证记录表';
 ```

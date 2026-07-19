@@ -6,21 +6,21 @@ from app.repositories.user_repository import user_repository
 
 
 class AuthService:
-    async def login_with_access_token(
+    async def login_with_auth_code(
         self,
-        access_token: str,
+        auth_code: str,
         session: AsyncSession,
     ) -> str:
-        """校验 access_token 对应的用户，成功后写入认证缓存。"""
-        normalized_access_token = access_token.strip()
-        if not normalized_access_token:
+        """校验 auth_code 对应的用户，成功后写入认证缓存。"""
+        normalized_auth_code = auth_code.strip()
+        if not normalized_auth_code:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="access_token 不能为空",
+                detail="auth_code 不能为空",
             )
 
-        user_id = await self._resolve_user_id_from_access_token(
-            access_token=normalized_access_token,
+        user_id = await self._resolve_user_id_from_auth_code(
+            auth_code=normalized_auth_code,
         )
         user = await user_repository.get_by_id(session=session, user_id=user_id)
         if user is None:
@@ -30,14 +30,14 @@ class AuthService:
             )
 
         await auth_cache.set(
-            access_token=normalized_access_token,
+            auth_code=normalized_auth_code,
             user_id=user.id,
         )
-        return normalized_access_token
+        return normalized_auth_code
 
-    async def _resolve_user_id_from_access_token(self, access_token: str) -> str:
-        """测试阶段暂时将 access_token 视为用户 ID；后续替换为外部接口调用。"""
-        return access_token
+    async def _resolve_user_id_from_auth_code(self, auth_code: str) -> str:
+        """测试阶段暂时将 auth_code 视为用户 ID；后续替换为外部接口调用。"""
+        return auth_code
 
 
 auth_service = AuthService()

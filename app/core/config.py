@@ -16,10 +16,13 @@ class Settings(BaseSettings):
     ASSETS_DIR: Path = BASE_DIR / "assets"
     IMAGE_ASSETS_DIR: Path = ASSETS_DIR / "images"
     AVATAR_IMAGE_DIR: Path = IMAGE_ASSETS_DIR / "avatar"
+    PROJECT_ICON_IMAGE_DIR: Path = IMAGE_ASSETS_DIR / "project_icon"
+    PROOF_RECORD_IMAGE_DIR: Path = IMAGE_ASSETS_DIR / "proof_record"
     DATABASE_URL: str = "mysql+asyncmy://flame:flame123456@127.0.0.1:3307/flame_winter_pheno?charset=utf8mb4"
     DB_ECHO: bool = False
     AUTH_CACHE_TTL_SECONDS: int = 7200
     AUTH_CACHE_CLEANUP_INTERVAL_SECONDS: int = 300
+    SEASON_PARTICIPATION_ALLOWED_DAYS: int = 7
 
 
 settings = Settings()

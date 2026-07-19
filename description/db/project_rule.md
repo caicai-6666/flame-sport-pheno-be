@@ -14,6 +14,14 @@
 
 当前设计中，项目规则是平台通用规则，不随赛季变化。
 
+当前前端挑战规则以“副描述 + 指标项 + 备注”的形式展示，因此本表将规则拆分为：
+
+```text
+sub_desc     = 挑战副描述
+rule_content = 规则指标 JSON
+rule_note    = 规则备注
+```
+
 ---
 
 ## 字段说明
@@ -23,7 +31,9 @@
 | id           | BIGINT UNSIGNED  |       是 |   自增 | 项目规则主键 ID                      |
 | project_id   | BIGINT UNSIGNED  |       是 |     无 | 项目 ID，关联 `project.id`           |
 | level_id     | BIGINT UNSIGNED  |       是 |     无 | 项目等级 ID，关联 `project_level.id` |
-| rule_content | TEXT             |       是 |     无 | 规则内容说明                         |
+| sub_desc     | VARCHAR(128)     |       否 |   NULL | 挑战副描述                           |
+| rule_content | JSON             |       是 |     无 | 规则指标内容，JSON 数组              |
+| rule_note    | VARCHAR(255)     |       否 |   NULL | 规则备注说明                         |
 | status       | TINYINT UNSIGNED |       是 |      1 | 规则状态：`1` 启用，`0` 停用         |
 
 ---
@@ -71,22 +81,109 @@
 
 ---
 
-### rule_content
+### sub_desc
 
-规则内容说明。
+挑战副描述。
 
-用于描述某个项目、某个等级下需要完成的挑战要求。
+用于展示在挑战等级标题下方，描述该等级挑战的目标或适合人群。
 
 示例：
 
 ```text
-每日步数达到 8000 步，累计达标 20 天。
-累计跑步或快走 50km，平均配速不高于 8'00''。
-月初和月末各上传一次体重记录，并完成 BMI 下降目标。
+建立稳定的每日步行习惯
+提升有氧容量和节奏控制
+完成高频健身挑战
+按 BMI 分级设置减重目标
 ```
 
-当前平台采用月末统一人工审核模式，因此规则内容先以文本形式存储即可。  
-审核人员根据用户上传的凭证和该规则内容判断是否达标。
+该字段允许为空。  
+如果为空，前端可以不展示副描述。
+
+---
+
+### rule_content
+
+规则指标内容。
+
+该字段使用 MySQL 8.4 支持的 `JSON` 类型，用于存储前端可直接渲染的规则指标数组。
+
+推荐结构：
+
+```json
+[
+  {
+    "label": "每日步数",
+    "value": "8000步/天"
+  },
+  {
+    "label": "达标天数",
+    "value": "累计20天"
+  }
+]
+```
+
+对应前端展示：
+
+```text
+每日步数：8000步/天
+达标天数：累计20天
+```
+
+不同项目的规则指标数量和含义可能不同，因此使用 JSON 数组比固定字段更适合当前业务。
+
+示例：
+
+```json
+[
+  {
+    "label": "累计距离",
+    "value": "50km"
+  },
+  {
+    "label": "配速要求",
+    "value": "≤8'00''"
+  }
+]
+```
+
+```json
+[
+  {
+    "label": "BMI < 24",
+    "value": "2kg"
+  },
+  {
+    "label": "24–28",
+    "value": "3kg"
+  },
+  {
+    "label": "≥28",
+    "value": "4kg"
+  }
+]
+```
+
+MySQL `JSON` 类型会校验字段内容必须是合法 JSON，能减少后台配置时写入非法结构的风险。
+
+---
+
+### rule_note
+
+规则备注说明。
+
+用于展示在挑战规则底部，补充说明审核口径、适用范围或注意事项。
+
+示例：
+
+```text
+按自然日统计达标记录
+跑步或快走均可累计
+适合已有基础运动习惯
+以赛季起止体重变化计算
+```
+
+该字段允许为空。  
+如果为空，前端可以不展示备注。
 
 ---
 
@@ -113,7 +210,9 @@ CREATE TABLE project_rule (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '项目规则ID',
   project_id BIGINT UNSIGNED NOT NULL COMMENT '项目ID',
   level_id BIGINT UNSIGNED NOT NULL COMMENT '项目等级ID',
-  rule_content TEXT NOT NULL COMMENT '规则内容说明',
+  sub_desc VARCHAR(128) DEFAULT NULL COMMENT '挑战副描述',
+  rule_content JSON NOT NULL COMMENT '规则指标内容，JSON数组',
+  rule_note VARCHAR(255) DEFAULT NULL COMMENT '规则备注说明',
   status TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '状态：1启用，0停用',
   PRIMARY KEY (id),
   UNIQUE KEY uk_project_rule_project_level (project_id, level_id),
