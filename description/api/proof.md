@@ -3,20 +3,20 @@
 ## 路由前缀
 
 ```text
-/proof
+/api/proof
 ```
 
 ## 接口列表
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/proof` | 否 | 凭证子路由存活校验 |
-| GET | `/proof/config` | 是 | 获取项目上传凭证配置 |
-| GET | `/proof/current` | 是 | 获取当前用户当前赛季凭证 |
-| GET | `/proof/history` | 是 | 获取当前用户过往赛季历史凭证 |
-| POST | `/proof/upload` | 是 | 上传或更新项目凭证 |
+| GET | `/api/proof` | 否 | 凭证子路由存活校验 |
+| GET | `/api/proof/config` | 是 | 获取项目上传凭证配置 |
+| GET | `/api/proof/current` | 是 | 获取当前用户当前赛季凭证 |
+| GET | `/api/proof/history` | 是 | 获取当前用户过往赛季历史凭证 |
+| POST | `/api/proof/upload` | 是 | 上传或更新项目凭证 |
 
-## GET /proof
+## GET /api/proof
 
 成功响应：
 
@@ -26,12 +26,12 @@
 }
 ```
 
-## GET /proof/config
+## GET /api/proof/config
 
 请求示例：
 
 ```http
-GET /proof/config?project_id=3
+GET /api/proof/config?project_id=3
 Authorization: auth_code
 ```
 
@@ -80,14 +80,14 @@ Cache-Control: private, max-age=300
 
 后端会按 `project_id` 对上传配置做 5 分钟进程内缓存。上传配置属于低频变更数据，该缓存用于减少上传凭证窗口重复打开时的数据库查询；缓存过期后会重新读取 `project_upload_config`。
 
-## GET /proof/current
+## GET /api/proof/current
 
 该接口只返回当前激活赛季的凭证。当前激活赛季 ID 来自服务内的 `CurrentSeasonRuntime`；如果运行时缓存未初始化，接口会先从当前激活赛季加载。
 
 请求示例：
 
 ```http
-GET /proof/current
+GET /api/proof/current
 Authorization: auth_code
 ```
 
@@ -135,14 +135,14 @@ proof_record.created_at DESC
 proof_record.id DESC
 ```
 
-## GET /proof/history
+## GET /api/proof/history
 
 该接口只返回过往赛季凭证，会排除当前激活赛季的上传记录。当前激活赛季 ID 来自服务内的 `CurrentSeasonRuntime`；如果运行时缓存未初始化，接口会先从当前激活赛季加载。
 
 请求示例：
 
 ```http
-GET /proof/history
+GET /api/proof/history
 Authorization: auth_code
 ```
 
@@ -196,7 +196,7 @@ proof_record.id DESC
 bb123456-3-20260606090020-健身.jpg -> 健身.jpg
 ```
 
-## POST /proof/upload
+## POST /api/proof/upload
 
 请求类型：
 

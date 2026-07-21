@@ -15,6 +15,8 @@ from app.core.leaderboard_scheduler import (
 from app.core.storage import ensure_asset_directories
 from app.routers import auth, health, image, leaderboard, project, proof, season, shop, user
 
+API_PREFIX = "/api"
+
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
@@ -30,7 +32,14 @@ async def lifespan(application: FastAPI):
 
 
 def create_app() -> FastAPI:
-    application = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
+    application = FastAPI(
+        title=settings.PROJECT_NAME,
+        lifespan=lifespan,
+        docs_url=f"{API_PREFIX}/docs",
+        redoc_url=f"{API_PREFIX}/redoc",
+        openapi_url=f"{API_PREFIX}/openapi.json",
+        swagger_ui_oauth2_redirect_url=f"{API_PREFIX}/docs/oauth2-redirect",
+    )
     application.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -38,15 +47,15 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    application.include_router(auth.router)
-    application.include_router(health.router)
-    application.include_router(image.router)
-    application.include_router(leaderboard.router)
-    application.include_router(project.router)
-    application.include_router(proof.router)
-    application.include_router(season.router)
-    application.include_router(shop.router)
-    application.include_router(user.router)
+    application.include_router(auth.router, prefix=API_PREFIX)
+    application.include_router(health.router, prefix=API_PREFIX)
+    application.include_router(image.router, prefix=API_PREFIX)
+    application.include_router(leaderboard.router, prefix=API_PREFIX)
+    application.include_router(project.router, prefix=API_PREFIX)
+    application.include_router(proof.router, prefix=API_PREFIX)
+    application.include_router(season.router, prefix=API_PREFIX)
+    application.include_router(shop.router, prefix=API_PREFIX)
+    application.include_router(user.router, prefix=API_PREFIX)
     return application
 
 

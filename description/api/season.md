@@ -3,18 +3,18 @@
 ## 路由前缀
 
 ```text
-/season
+/api/season
 ```
 
 ## 接口列表
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/season` | 否 | 赛季子路由存活校验 |
-| GET | `/season/current` | 是 | 获取当前激活赛季 |
-| GET | `/season/participate_check` | 是 | 检查当前用户是否正式参与赛季 |
+| GET | `/api/season` | 否 | 赛季子路由存活校验 |
+| GET | `/api/season/current` | 是 | 获取当前激活赛季 |
+| GET | `/api/season/participate_check` | 是 | 检查当前用户是否正式参与赛季 |
 
-## GET /season
+## GET /api/season
 
 成功响应：
 
@@ -24,7 +24,7 @@
 }
 ```
 
-## GET /season/current
+## GET /api/season/current
 
 成功响应：
 
@@ -48,12 +48,12 @@ LIMIT 1
 
 接口会在当前进程内缓存当前赛季 ID 和要求锁定项目数量。
 
-## GET /season/participate_check
+## GET /api/season/participate_check
 
 请求示例：
 
 ```http
-GET /season/participate_check?season_id=1
+GET /api/season/participate_check?season_id=1
 Authorization: auth_code
 ```
 

@@ -16,7 +16,7 @@ assets/
 用户头像目录：
 
 ```text
-assets/images/avatar
+assets/api/images/avatar
 ```
 
 读取规则：
@@ -30,7 +30,7 @@ settings.AVATAR_IMAGE_DIR / user.avatar_url
 项目图标目录：
 
 ```text
-assets/images/project_icon
+assets/api/images/api/project_icon
 ```
 
 项目列表接口会读取 `project.icon_url` 对应文件，并返回 base64 字符串。
@@ -40,7 +40,7 @@ assets/images/project_icon
 商品图片目录：
 
 ```text
-assets/images/product
+assets/api/images/product
 ```
 
 商城信息接口只返回 `product.image_url` 字符串，不返回图片文件。
@@ -54,7 +54,7 @@ assets/images/product
 前端请求商品图片时应使用：
 
 ```text
-GET /image/product?filename={encodeURIComponent(product.image_url)}
+GET /api/image/product?filename={encodeURIComponent(product.image_url)}
 ```
 
 后端会去掉前导 `/` 或 `\`，再拼接到 `settings.PRODUCT_IMAGE_DIR`。
@@ -64,7 +64,7 @@ GET /image/product?filename={encodeURIComponent(product.image_url)}
 凭证图片目录：
 
 ```text
-assets/images/proof_record/{season_id}
+assets/api/images/api/proof_record/{season_id}
 ```
 
 上传接口生成的文件名：

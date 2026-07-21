@@ -4,16 +4,16 @@
 
 | 方法 | 路径 | 是否鉴权 | 说明 |
 | --- | --- | ---: | --- |
-| GET | `/leaderboard/info` | 是 | 获取当前赛季排行榜基础信息 |
+| GET | `/api/leaderboard/info` | 是 | 获取当前赛季排行榜基础信息 |
 
 ---
 
-## GET /leaderboard/info
+## GET /api/leaderboard/info
 
 请求示例：
 
 ```http
-GET /leaderboard/info
+GET /api/leaderboard/info
 Authorization: auth_code
 ```
 

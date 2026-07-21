@@ -3,28 +3,28 @@
 ## 路由前缀
 
 ```text
-/project
+/api/project
 ```
 
 ## 接口列表
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/project` | 否 | 项目子路由存活校验 |
-| GET | `/project/list` | 是 | 获取启用项目列表 |
-| GET | `/project/rules` | 是 | 获取项目挑战规则 |
-| GET | `/project/lock_check` | 是 | 查询当前用户已锁定项目 |
-| POST | `/project/lock` | 是 | 锁定赛季项目 |
-| POST | `/project/lock_level` | 是 | 锁定赛季挑战等级 |
+| GET | `/api/project` | 否 | 项目子路由存活校验 |
+| GET | `/api/project/list` | 是 | 获取启用项目列表 |
+| GET | `/api/project/rules` | 是 | 获取项目挑战规则 |
+| GET | `/api/project/lock_check` | 是 | 查询当前用户已锁定项目 |
+| POST | `/api/project/lock` | 是 | 锁定赛季项目 |
+| POST | `/api/project/lock_level` | 是 | 锁定赛季挑战等级 |
 
 凭证上传配置和凭证上传已迁移到 `proof` 路由：
 
 ```text
-GET /proof/config
-POST /proof/upload
+GET /api/proof/config
+POST /api/proof/upload
 ```
 
-## GET /project
+## GET /api/project
 
 成功响应：
 
@@ -34,7 +34,7 @@ POST /proof/upload
 }
 ```
 
-## GET /project/list
+## GET /api/project/list
 
 成功响应：
 
@@ -58,12 +58,12 @@ ORDER BY project.id ASC
 
 `image` 由 `project.icon_url` 对应的本地项目图标读取后转为 base64。
 
-## GET /project/rules
+## GET /api/project/rules
 
 请求示例：
 
 ```http
-GET /project/rules?project_id=1
+GET /api/project/rules?project_id=1
 Authorization: auth_code
 ```
 
@@ -96,12 +96,12 @@ project_level.status = 1
 project_rule.level_id = project_level.id
 ```
 
-## GET /project/lock_check
+## GET /api/project/lock_check
 
 请求示例：
 
 ```http
-GET /project/lock_check?season_id=1
+GET /api/project/lock_check?season_id=1
 Authorization: auth_code
 ```
 
@@ -117,7 +117,7 @@ Authorization: auth_code
 
 如果没有 `season_user` 记录，返回空数组。
 
-## POST /project/lock
+## POST /api/project/lock
 
 请求体：
 
@@ -138,7 +138,7 @@ Authorization: auth_code
 
 接口只允许锁定当前激活赛季下启用的项目，最多锁定数量由 `season.required_project_count` 控制。
 
-## POST /project/lock_level
+## POST /api/project/lock_level
 
 请求体：
 

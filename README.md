@@ -69,8 +69,8 @@ router -> service -> repository -> model
 
 服务启动后可访问：
 
-- API 根路径：`http://127.0.0.1:8000/`
-- OpenAPI 文档：`http://127.0.0.1:8000/docs`
+- API 根路径：`http://127.0.0.1:8000/api/`
+- OpenAPI 文档：`http://127.0.0.1:8000/api/docs`
 
 MySQL Docker 环境的构建和启动方式见 [`description/dev/mysql_docker.md`](description/dev/mysql_docker.md)。
 

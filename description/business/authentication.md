@@ -37,7 +37,7 @@ Authorization: auth_code
 当前资料完备性检查接口：
 
 ```text
-GET /auth/profile_complete_check
+GET /api/auth/profile_complete_check
 ```
 
 当前阶段只检查 `user.height_cm` 是否已填写。
@@ -56,7 +56,7 @@ missing_fields 包含 height_cm
 缓存实现位于：
 
 ```text
-app/core/auth_cache.py
+app/core/api/auth_cache.py
 ```
 
 缓存结构：

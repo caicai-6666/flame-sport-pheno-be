@@ -3,18 +3,18 @@
 ## 路由前缀
 
 ```text
-/auth
+/api/auth
 ```
 
 ## 接口列表
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/auth` | 否 | 鉴权子路由存活校验 |
-| POST | `/auth/login` | 否 | 登录并写入服务内存认证缓存 |
-| GET | `/auth/profile_complete_check` | 是 | 检查当前用户资料是否完整 |
+| GET | `/api/auth` | 否 | 鉴权子路由存活校验 |
+| POST | `/api/auth/login` | 否 | 登录并写入服务内存认证缓存 |
+| GET | `/api/auth/profile_complete_check` | 是 | 检查当前用户资料是否完整 |
 
-## GET /auth
+## GET /api/auth
 
 用于确认 `auth` 子路由已注册。
 
@@ -26,7 +26,7 @@
 }
 ```
 
-## POST /auth/login
+## POST /api/auth/login
 
 请求体：
 
@@ -69,12 +69,12 @@ Authorization: auth_code
 
 后端从认证缓存解析当前 `user_id`。缓存不存在、为空或过期时返回 `401`。
 
-## GET /auth/profile_complete_check
+## GET /api/auth/profile_complete_check
 
 请求示例：
 
 ```http
-GET /auth/profile_complete_check
+GET /api/auth/profile_complete_check
 Authorization: auth_code
 ```
 

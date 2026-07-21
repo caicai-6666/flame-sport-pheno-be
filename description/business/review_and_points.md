@@ -34,7 +34,7 @@ rejected
 当前排行榜读取接口：
 
 ```text
-GET /leaderboard/info
+GET /api/leaderboard/info
 ```
 
 该接口直接查询 `leaderboard_snapshot`，关联 `season_user`、`user` 和 `department` 后返回用户名称、部门名称、挑战等级 ID 与 `checkin_count`。接口只返回当前激活赛季的数据，不在请求时实时统计 `proof_record`，也不在后端排序。

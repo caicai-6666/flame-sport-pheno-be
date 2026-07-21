@@ -46,6 +46,14 @@ uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 
 `main.py` 中的直接运行配置当前使用固定局域网地址；本地开发更建议使用上面的 uvicorn 命令。
 
+所有服务接口均以 `/api` 为公共前缀。OpenAPI 文档、Redoc 和 OpenAPI JSON 分别为：
+
+```text
+/api/docs
+/api/redoc
+/api/openapi.json
+```
+
 ## 启动初始化
 
 应用启动时会：

@@ -7,23 +7,23 @@
 当前业务实现位于：
 
 ```text
-app/services/proof_service.py
+app/services/api/proof_service.py
 ```
 
 对应接口：
 
 ```text
-GET /proof/config
-GET /proof/current
-GET /proof/history
-POST /proof/upload
+GET /api/proof/config
+GET /api/proof/current
+GET /api/proof/history
+POST /api/proof/upload
 ```
 
 ## 上传配置读取
 
-`GET /proof/config` 用于返回项目可用的上传凭证类型。上传配置属于低频变更数据，服务层会按 `project_id` 缓存 5 分钟，并在响应中返回短期浏览器私有缓存头。
+`GET /api/proof/config` 用于返回项目可用的上传凭证类型。上传配置属于低频变更数据，服务层会按 `project_id` 缓存 5 分钟，并在响应中返回短期浏览器私有缓存头。
 
-该缓存只用于读取上传窗口配置，`POST /proof/upload` 在写入凭证前仍会查询当前启用的 `project_upload_config`，避免关键写库逻辑依赖过期缓存。
+该缓存只用于读取上传窗口配置，`POST /api/proof/upload` 在写入凭证前仍会查询当前启用的 `project_upload_config`，避免关键写库逻辑依赖过期缓存。
 
 ## 前置条件
 
@@ -43,7 +43,7 @@ project_upload_config.status = 1
 凭证图片保存到：
 
 ```text
-assets/images/proof_record/{season_id}
+assets/api/images/api/proof_record/{season_id}
 ```
 
 文件名规则：
@@ -98,7 +98,7 @@ review_comment = NULL
 
 ## 历史凭证
 
-`GET /proof/current` 基于当前登录用户 ID 查询当前激活赛季凭证。
+`GET /api/proof/current` 基于当前登录用户 ID 查询当前激活赛季凭证。
 该接口返回结构与历史凭证相似，但返回的是用户上传备注 `note`，而不是审核意见 `reviewComment`。
 
 查询关系：
@@ -112,7 +112,7 @@ proof_record.project_id = project.id
 proof_record.status = 1
 ```
 
-`GET /proof/history` 基于当前登录用户 ID 查询过往赛季历史凭证，并排除当前激活赛季的上传记录。
+`GET /api/proof/history` 基于当前登录用户 ID 查询过往赛季历史凭证，并排除当前激活赛季的上传记录。
 
 当前激活赛季 ID 由服务运行时缓存 `CurrentSeasonRuntime` 提供。缓存未初始化时，接口会先读取当前激活赛季并写入缓存。
 
