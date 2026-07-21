@@ -6,6 +6,7 @@
 assets/
   images/
     avatar/
+    product/
     project_icon/
     proof_record/
 ```
@@ -34,6 +35,30 @@ assets/images/project_icon
 
 项目列表接口会读取 `project.icon_url` 对应文件，并返回 base64 字符串。
 
+## product
+
+商品图片目录：
+
+```text
+assets/images/product
+```
+
+商城信息接口只返回 `product.image_url` 字符串，不返回图片文件。
+
+示例：
+
+```text
+/Keep 弹力带-入门款.jpg
+```
+
+前端请求商品图片时应使用：
+
+```text
+GET /image/product?filename={encodeURIComponent(product.image_url)}
+```
+
+后端会去掉前导 `/` 或 `\`，再拼接到 `settings.PRODUCT_IMAGE_DIR`。
+
 ## proof_record
 
 凭证图片目录：
@@ -56,4 +81,4 @@ bb123456-3-20260606090020-健身.jpg
 
 ## 路径安全
 
-头像、项目图标和凭证图片读取时都应确保路径没有逃逸出对应资源目录。
+头像、项目图标、商品图片和凭证图片读取时都应确保路径没有逃逸出对应资源目录。

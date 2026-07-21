@@ -33,7 +33,7 @@ app/core/config.py
 默认数据库连接：
 
 ```text
-mysql+asyncmy://flame:flame123456@127.0.0.1:3307/flame_winter_pheno?charset=utf8mb4
+mysql+asyncmy://flame:flame123456@127.0.0.1:3307/flame_sport_pheno?charset=utf8mb4
 ```
 
 可通过 `.env` 覆盖。
@@ -52,4 +52,24 @@ uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 
 1. 创建本地资源目录。
 2. 启动认证缓存过期清理任务。
-3. 注册所有路由。
+3. 启动排行榜快照刷新任务。
+4. 注册所有路由。
+
+本地资源目录包括：
+
+```text
+assets/images/avatar
+assets/images/project_icon
+assets/images/product
+assets/images/proof_record
+```
+
+排行榜刷新相关环境变量：
+
+```text
+LEADERBOARD_REFRESH_ENABLED=true
+LEADERBOARD_REFRESH_ON_STARTUP=true
+LEADERBOARD_REFRESH_INTERVAL_SECONDS=86400
+```
+
+本地调试时可以将 `LEADERBOARD_REFRESH_INTERVAL_SECONDS` 改小，例如 `60`。

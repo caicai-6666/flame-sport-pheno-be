@@ -11,6 +11,7 @@ def ensure_asset_directories() -> None:
     settings.IMAGE_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
     settings.AVATAR_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
     settings.PROJECT_ICON_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    settings.PRODUCT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
     settings.PROOF_RECORD_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 

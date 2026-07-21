@@ -182,6 +182,14 @@ points_after = 70
 ---
 
 ## MySQL 建表语句
+
+索引设计原则：
+
+- `point_record` 是积分流水表，后续写入会比较频繁，索引需要克制。
+- 保留 `(user_id, created_at)` 复合索引，用于查询某个用户的积分流水并按时间展示。
+- 保留 `product_id` 索引，用于后续按商品统计兑换记录或排查兑换流水。
+- 暂不单独为 `change_type`、`status`、`created_at` 建索引。`change_type` 和 `status` 基数较低，单列索引收益有限；单独 `created_at` 只有在全局时间范围查询频繁时才需要。
+
 ```sql
 CREATE TABLE point_record (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '积分变动记录ID',
@@ -194,11 +202,8 @@ CREATE TABLE point_record (
   status TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '状态：1有效，0作废',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '积分变动时间',
   PRIMARY KEY (id),
-  KEY idx_point_record_user_id (user_id),
+  KEY idx_point_record_user_created_at (user_id, created_at),
   KEY idx_point_record_product_id (product_id),
-  KEY idx_point_record_change_type (change_type),
-  KEY idx_point_record_status (status),
-  KEY idx_point_record_created_at (created_at),
   CONSTRAINT fk_point_record_user
     FOREIGN KEY (user_id) REFERENCES `user`(id),
   CONSTRAINT fk_point_record_product

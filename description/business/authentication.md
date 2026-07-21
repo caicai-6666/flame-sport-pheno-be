@@ -32,6 +32,25 @@ Authorization: auth_code
 
 后端通过 `get_current_user_id` 从缓存中解析当前用户 ID。
 
+## 用户资料完备性检查
+
+当前资料完备性检查接口：
+
+```text
+GET /auth/profile_complete_check
+```
+
+当前阶段只检查 `user.height_cm` 是否已填写。
+
+如果身高为空，返回：
+
+```text
+is_complete = false
+missing_fields 包含 height_cm
+```
+
+后续如果需要强制补充更多用户资料，可以继续扩展该接口的检查字段。
+
 ## 认证缓存
 
 缓存实现位于：

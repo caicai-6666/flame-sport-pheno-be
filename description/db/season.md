@@ -39,9 +39,10 @@ season_user.season_id
 user_season_project.season_id
 proof_record.season_id
 point_ledger.season_id
-leaderboard_snapshot.season_id
 exchange_order.season_id
 ```
+
+其中 `leaderboard_snapshot` 通过 `season_user_id` 间接关联赛季，不直接保存 `season_id`。
 
 ---
 

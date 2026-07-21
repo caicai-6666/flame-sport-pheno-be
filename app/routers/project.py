@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
@@ -32,43 +32,6 @@ async def list_project_rules(
     """根据项目 ID 获取该项目的挑战规则列表。"""
     return await project_service.list_project_rules(
         project_id=project_id,
-        session=session,
-    )
-
-
-@router.get("/upload_config")
-async def list_project_upload_configs(
-    project_id: int = Query(..., ge=1),
-    user_id: str = Depends(get_current_user_id),
-    session: AsyncSession = Depends(get_session),
-):
-    """根据项目 ID 获取该项目的上传凭证配置列表。"""
-    return await project_service.list_project_upload_configs(
-        project_id=project_id,
-        session=session,
-    )
-
-
-@router.post("/upload_proof")
-async def upload_project_proof(
-    season_id: int = Form(..., ge=1),
-    project_id: int = Form(..., ge=1),
-    project_upload_config_id: int = Form(..., ge=1),
-    record_type: str | None = Form(default=None),
-    note: str | None = Form(default=None),
-    image: UploadFile = File(...),
-    user_id: str = Depends(get_current_user_id),
-    session: AsyncSession = Depends(get_session),
-):
-    """上传当前用户指定赛季和项目下的运动凭证。"""
-    return await project_service.upload_project_proof(
-        season_id=season_id,
-        project_id=project_id,
-        project_upload_config_id=project_upload_config_id,
-        record_type=record_type,
-        note=note,
-        image=image,
-        user_id=user_id,
         session=session,
     )
 

@@ -6,6 +6,30 @@ from app.repositories.user_repository import user_repository
 
 
 class AuthService:
+    async def check_user_profile_completion(
+        self,
+        user_id: str,
+        session: AsyncSession,
+    ) -> dict[str, bool | list[str]]:
+        """检查当前用户资料是否完整。"""
+        user = await user_repository.get_by_id(session=session, user_id=user_id)
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="用户不存在",
+            )
+
+        missing_fields: list[str] = []
+        # 当前阶段只要求身高字段完整，后续新增必填资料时扩展这里。
+        if user.height_cm is None:
+            missing_fields.append("height_cm")
+
+        return {
+            "is_complete": not missing_fields,
+            "height_cm_completed": user.height_cm is not None,
+            "missing_fields": missing_fields,
+        }
+
     async def login_with_auth_code(
         self,
         auth_code: str,

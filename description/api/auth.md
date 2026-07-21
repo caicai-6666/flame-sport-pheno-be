@@ -12,6 +12,7 @@
 | --- | --- | --- | --- |
 | GET | `/auth` | 否 | 鉴权子路由存活校验 |
 | POST | `/auth/login` | 否 | 登录并写入服务内存认证缓存 |
+| GET | `/auth/profile_complete_check` | 是 | 检查当前用户资料是否完整 |
 
 ## GET /auth
 
@@ -67,3 +68,39 @@ Authorization: auth_code
 ```
 
 后端从认证缓存解析当前 `user_id`。缓存不存在、为空或过期时返回 `401`。
+
+## GET /auth/profile_complete_check
+
+请求示例：
+
+```http
+GET /auth/profile_complete_check
+Authorization: auth_code
+```
+
+当前阶段只检查 `user.height_cm` 是否已填写。
+
+成功响应：
+
+```json
+{
+  "is_complete": false,
+  "height_cm_completed": false,
+  "missing_fields": ["height_cm"]
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| is_complete | boolean | 当前用户资料是否完整 |
+| height_cm_completed | boolean | 身高字段是否已填写 |
+| missing_fields | array | 当前缺失字段列表 |
+
+错误响应：
+
+| 状态码 | 场景 | detail |
+| --- | --- | --- |
+| 401 | 未登录或登录过期 | `登录状态无效或已过期，请重新登录` |
+| 404 | 用户不存在 | `用户不存在` |
