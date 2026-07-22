@@ -9,6 +9,13 @@ venv/
 # 本地环境变量
 .env
 
+# 测试文件
+tests/
+test_*.py
+*_test.py
+test_*.http
+*_test.http
+
 # 运行期资源文件
 # 实际图片等资源由 assets/.gitignore 控制，不提交到 Git。
 assets/**
