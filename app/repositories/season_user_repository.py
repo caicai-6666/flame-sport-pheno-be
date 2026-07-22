@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
 from sqlmodel import select
@@ -64,6 +66,22 @@ class SeasonUserRepository:
         )
         return result.scalar_one_or_none()
 
+    async def lock_active_project(
+        self,
+        session: AsyncSession,
+        season_user_id: int,
+        project_id: int,
+    ) -> SeasonUserProject | None:
+        """锁定有效赛季项目，供初审结果和完成进度在同一事务内写入。"""
+        result = await session.execute(
+            select(SeasonUserProject)
+            .where(SeasonUserProject.season_user_id == season_user_id)
+            .where(SeasonUserProject.project_id == project_id)
+            .where(SeasonUserProject.status == 1)
+            .with_for_update()
+        )
+        return result.scalar_one_or_none()
+
     async def create_project_lock(
         self,
         session: AsyncSession,
@@ -74,6 +92,7 @@ class SeasonUserRepository:
         season_user_project = SeasonUserProject(
             season_user_id=season_user_id,
             project_id=project_id,
+            completion_progress=Decimal("0.0000"),
             status=1,
         )
         session.add(season_user_project)
@@ -88,6 +107,20 @@ class SeasonUserRepository:
         """查询赛季用户已锁定且有效的项目 ID。"""
         result = await session.execute(
             select(SeasonUserProject.project_id)
+            .where(SeasonUserProject.season_user_id == season_user_id)
+            .where(SeasonUserProject.status == 1)
+            .order_by(SeasonUserProject.id)
+        )
+        return list(result.scalars().all())
+
+    async def list_locked_projects_with_progress(
+        self,
+        session: AsyncSession,
+        season_user_id: int,
+    ) -> list[SeasonUserProject]:
+        """查询赛季用户已锁定项目及其当前完成进度。"""
+        result = await session.execute(
+            select(SeasonUserProject)
             .where(SeasonUserProject.season_user_id == season_user_id)
             .where(SeasonUserProject.status == 1)
             .order_by(SeasonUserProject.id)

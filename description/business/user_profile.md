@@ -9,7 +9,7 @@
 当前设置接口：
 
 ```text
-POST /api/user/profile
+POST /flame/api/user/profile
 ```
 
 请求体：
@@ -32,7 +32,7 @@ height_cm
 资料是否完整由以下接口判断：
 
 ```text
-GET /api/auth/profile_complete_check
+GET /flame/api/auth/profile_complete_check
 ```
 
 当前完备性规则仍然只检查 `user.height_cm IS NOT NULL`。

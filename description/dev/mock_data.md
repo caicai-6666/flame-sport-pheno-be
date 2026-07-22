@@ -56,6 +56,12 @@ bb123456-3-20260606090020-健身.jpg
 approved
 rejected
 pending
+preliminary_approved
+preliminary_rejected
 ```
 
 生成批量 SQL 时，`image_url` 只写完整文件名，不写目录路径。
+
+## 项目完成进度
+
+`season_user_project.completion_progress` 使用 `0`～`1` 的小数，例如 `0.3500` 表示完成 35%，`1.0000` 表示项目目标已完成。新锁定项目应使用 `0.0000`。

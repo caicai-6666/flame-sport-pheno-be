@@ -50,6 +50,20 @@ async def check_locked_projects(
     )
 
 
+@router.get("/progress")
+async def list_locked_project_progress(
+    season_id: int = Query(..., ge=1),
+    user_id: str = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_session),
+):
+    """查询当前用户已锁定项目的赛季完成进度。"""
+    return await project_service.list_locked_project_progress(
+        season_id=season_id,
+        user_id=user_id,
+        session=session,
+    )
+
+
 @router.post("/lock")
 async def lock_project(
     season_id: int = Body(..., ge=1),

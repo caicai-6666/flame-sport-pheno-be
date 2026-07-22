@@ -24,7 +24,7 @@
 | project_upload_config_id | BIGINT UNSIGNED | 是 | 无 | 项目上传配置 ID，关联 `project_upload_config.id` |
 | image_url      | VARCHAR(500)     |       是 |          无 | 上传图片路径                           |
 | note           | VARCHAR(255)     |       否 |        NULL | 用户备注                               |
-| review_status  | VARCHAR(32)      |       是 |     pending | 审核状态                               |
+| review_status  | VARCHAR(32)      |       是 |     pending | 初审与终审状态                         |
 | review_comment | VARCHAR(500)     |       否 |        NULL | 审核评论，用于后台人员填写审核说明     |
 | status         | TINYINT UNSIGNED |       是 |           1 | 记录状态：`1` 正常，`0` 无效/删除      |
 | created_at     | DATETIME         |       是 | CURRENT_TIMESTAMP | 上传时间                         |
@@ -158,30 +158,36 @@ MySQL 存储图片路径
 
 ### review_status
 
-审核状态。
+审核状态。该字段不新增物理列，而是在原 `VARCHAR(32)` 字段中扩展状态值，以记录赛季内初审和赛后终审。
 
-建议取值：
+取值：
 ```text
 pending
+preliminary_approved
+preliminary_rejected
 approved
 rejected
 ```
 含义如下：
 ```text
-pending  = 待审核
-approved = 审核通过
-rejected = 审核拒绝
+pending              = 待初审
+preliminary_approved = 初审通过
+preliminary_rejected = 初审失败
+approved             = 终审通过
+rejected             = 终审失败
 ```
-当前平台采用月末统一审核模式。  
-用户上传凭证后，默认状态为：
+
+用户上传凭证或当天重复上传后，默认状态为：
 ```text
 pending
 ```
-月末由审核人员统一审核后，再更新为：
+
+未来每日初审任务根据图片、`note` 和项目等级规则更新为：
 ```text
-approved
-rejected
+preliminary_approved
+preliminary_rejected
 ```
+初审通过的凭证计入排行榜；初审失败的凭证不计入，用户可重传后重新初审。赛季结束后再统一更新为 `approved` 或 `rejected`，用于最终审核和积分结算。
 ---
 
 ### review_comment
@@ -199,7 +205,7 @@ rejected
 
 该字段允许为空。
 
-原因是待审核记录通常还没有审核评论；审核通过时也可能不需要额外说明。
+原因是待初审记录通常还没有审核评论；初审或终审通过时也可能不需要额外说明。
 
 ---
 
@@ -245,7 +251,7 @@ CREATE TABLE proof_record (
   project_upload_config_id BIGINT UNSIGNED NOT NULL COMMENT '项目上传配置ID',
   image_url VARCHAR(500) NOT NULL COMMENT '上传图片路径',
   note VARCHAR(255) DEFAULT NULL COMMENT '用户备注',
-  review_status VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT '审核状态：pending待审核，approved通过，rejected拒绝',
+  review_status VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT '审核状态：pending待初审，preliminary_approved初审通过，preliminary_rejected初审失败，approved终审通过，rejected终审失败',
   review_comment VARCHAR(500) DEFAULT NULL COMMENT '审核评论，用于后台人员填写审核说明',
   status TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '状态：1正常，0无效/删除',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',

@@ -1,6 +1,11 @@
 from sqlmodel import Field, SQLModel
 
 
+# 上传配置的 record_type 同时表达减重挑战的月度审核阶段。
+MONTH_START_RECORD_TYPE = "月初记录"
+MONTH_END_RECORD_TYPE = "月末记录"
+
+
 class ProjectUploadConfig(SQLModel, table=True):
     """项目上传配置表模型。"""
 

@@ -16,13 +16,25 @@ assets/
 用户头像目录：
 
 ```text
-assets/api/images/avatar
+assets/images/avatar
 ```
 
-读取规则：
+首次钉钉登录初始化时，如钉钉返回头像地址，服务端会下载 JPEG、PNG 或 WebP 图片并统一转换为 JPEG。文件名为安全化后的钉钉 `userId` 加小写 `.jpg`，例如：
 
 ```text
-settings.AVATAR_IMAGE_DIR / user.avatar_url
+james.jpg
+```
+
+`user.avatar_url` 保存带前导斜杠的相对路径，例如：
+
+```text
+/james.jpg
+```
+
+读取时会去除前导斜杠，再拼接目录：
+
+```text
+settings.AVATAR_IMAGE_DIR / user.avatar_url.lstrip("/")
 ```
 
 ## project_icon

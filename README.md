@@ -10,20 +10,21 @@
 - SQLModel / SQLAlchemy `AsyncSession`
 - MySQL 8.4 / asyncmy
 - Pydantic Settings
+- HTTPX
 - Uvicorn
 
 ## 当前实现
 
-- **鉴权**：通过 `auth_code` 登录并维护进程内认证缓存；当前联调阶段将 `auth_code` 直接视为 `user_id`。
+- **鉴权**：对接钉钉企业内部 H5 微应用免登；后端使用 `auth_code` 换取钉钉 `userId`，并维护进程内认证缓存。
 - **用户资料**：查询资料完整度，维护用户身高信息。
 - **赛季参与**：查询当前赛季，检查用户参与状态和报名时间。
-- **运动项目**：查询项目与挑战规则，锁定赛季项目及挑战等级。
-- **运动凭证**：读取项目上传配置，上传 JPG 凭证，查询当前赛季和历史凭证。
-- **排行榜**：定时统计当前赛季有效凭证数量并生成排行榜快照。
+- **运动项目**：查询项目与挑战规则，锁定赛季项目及挑战等级，并查询已锁定项目的完成进度。
+- **运动凭证**：读取项目上传配置，上传 JPG 凭证，查询当前赛季和历史凭证；可由每日 DeepSeek 文本初审写入审核意见、初审状态和项目进度。
+- **排行榜**：定时统计当前赛季初审通过的有效凭证数量并生成排行榜快照；减重挑战月初不计数，月末同项目最多计一次。
 - **积分商城**：查询商品和积分流水，使用积分兑换商品。
 - **本地资源**：管理头像、项目图标、商品图片和运动凭证图片。
 
-当前鉴权缓存只存在于单个服务进程中，暂不支持多实例共享登录态、刷新令牌和角色权限。真实外部认证系统后续可在 `AuthService._resolve_user_id_from_auth_code` 中接入。
+当前鉴权缓存和钉钉应用 access token 只存在于单个服务进程中，暂不支持多实例共享登录态、刷新令牌和角色权限。
 
 ## 项目结构
 
@@ -49,7 +50,7 @@ main.py          应用入口与生命周期管理
 router -> service -> repository -> model
 ```
 
-应用启动时会创建本地资源目录，并启动认证缓存清理和排行榜快照刷新任务。
+应用启动时会创建本地资源目录，并启动认证缓存清理、排行榜快照刷新，以及可选的每日 DeepSeek 文本初审任务。
 
 ## 本地运行
 
@@ -59,7 +60,7 @@ router -> service -> repository -> model
    pip install -r requirements.txt
    ```
 
-2. 根据 `.env.example` 创建 `.env`，配置可用的 MySQL 连接。
+2. 根据 `.env.example` 创建 `.env`，配置可用的 MySQL 连接和钉钉企业内部应用凭证。
 
 3. 启动服务：
 
@@ -69,8 +70,8 @@ router -> service -> repository -> model
 
 服务启动后可访问：
 
-- API 根路径：`http://127.0.0.1:8000/api/`
-- OpenAPI 文档：`http://127.0.0.1:8000/api/docs`
+- API 根路径：`http://127.0.0.1:8000/flame/api/`
+- OpenAPI 文档：`http://127.0.0.1:8000/flame/api/docs`
 
 MySQL Docker 环境的构建和启动方式见 [`description/dev/mysql_docker.md`](description/dev/mysql_docker.md)。
 

@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.runtime_env import CurrentSeasonRuntime
 from app.core.storage import build_proof_record_image_path
 from app.models.project_upload_config import ProjectUploadConfig
+from app.models.proof_record import ProofReviewStatus
 from app.repositories.project_repository import project_repository
 from app.repositories.proof_record_repository import proof_record_repository
 from app.repositories.season_repository import season_repository
@@ -65,7 +66,7 @@ class ProofService:
         project_id: int,
         project_upload_config_id: int,
         record_type: str | None,
-        note: str | None,
+        note: str,
         image: UploadFile,
         user_id: str,
         session: AsyncSession,
@@ -221,6 +222,8 @@ class ProofService:
                 "seasonName": season.name,
                 "projectName": project.name,
                 "reviewStatus": proof_record.review_status,
+                # 初审任务后续会写入理由，当前赛季列表需让用户看到失败原因。
+                "reviewComment": proof_record.review_comment or "",
                 "note": proof_record.note or "",
                 "imageName": self._build_display_proof_image_name(
                     proof_record.image_url,
@@ -289,10 +292,10 @@ class ProofService:
             new_image_url=image_url,
             season_id=season_id,
         )
-        # 用户当天重复上传时覆盖图片和备注，并重新进入待审核状态。
+        # 重传代表用户提交了新凭证，必须重新进入待初审，不能沿用旧初审结论。
         proof_record.image_url = image_url
         proof_record.note = note
-        proof_record.review_status = "pending"
+        proof_record.review_status = ProofReviewStatus.PENDING.value
         proof_record.review_comment = None
         proof_record.created_at = uploaded_at
         await session.flush()
@@ -353,14 +356,14 @@ class ProofService:
             )
         return normalized_record_type
 
-    def _normalize_note(self, note: str | None) -> str | None:
-        """规范化用户备注，空字符串按未填写处理。"""
-        if note is None:
-            return None
-
+    def _normalize_note(self, note: str) -> str:
+        """规范化并确保用户提供可供初审解析的运动指标说明。"""
         normalized_note = note.strip()
         if not normalized_note:
-            return None
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="note 不能为空，请填写本次运动指标",
+            )
 
         if len(normalized_note) > 255:
             raise HTTPException(

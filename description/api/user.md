@@ -4,12 +4,12 @@
 
 | 方法 | 路径 | 是否鉴权 | 说明 |
 | --- | --- | ---: | --- |
-| GET | `/api/user` | 否 | 用户子路由存活校验 |
-| POST | `/api/user/profile` | 是 | 设置当前用户资料 |
+| GET | `/flame/api/user` | 否 | 用户子路由存活校验 |
+| POST | `/flame/api/user/profile` | 是 | 设置当前用户资料 |
 
 ---
 
-## GET /api/user
+## GET /flame/api/user
 
 成功响应：
 
@@ -21,12 +21,12 @@
 
 ---
 
-## POST /api/user/profile
+## POST /flame/api/user/profile
 
 请求示例：
 
 ```http
-POST /api/user/profile
+POST /flame/api/user/profile
 Authorization: auth_code
 Content-Type: application/json
 ```
@@ -57,7 +57,7 @@ Content-Type: application/json
 
 - 当前接口只更新 `user.height_cm`。
 - 后端会将身高保留两位小数后写入数据库。
-- 用户资料完整性检查仍通过 `/api/auth/profile_complete_check` 完成。
+- 用户资料完整性检查仍通过 `/flame/api/auth/profile_complete_check` 完成。
 
 错误响应：
 

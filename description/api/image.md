@@ -3,16 +3,16 @@
 ## 路由前缀
 
 ```text
-/api/image
+/flame/api/image
 ```
 
 ## 接口列表
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/api/image` | 否 | 图片子路由存活校验 |
-| GET | `/api/image/avatar` | 是 | 获取当前用户头像图片 |
-| GET | `/api/image/product` | 是 | 获取指定商品图片 |
+| GET | `/flame/api/image` | 否 | 图片子路由存活校验 |
+| GET | `/flame/api/image/avatar` | 是 | 获取当前用户头像图片 |
+| GET | `/flame/api/image/product` | 是 | 获取指定商品图片 |
 
 ## 通用鉴权
 
@@ -22,7 +22,7 @@
 Authorization: auth_code
 ```
 
-## GET /api/image
+## GET /flame/api/image
 
 成功响应：
 
@@ -32,14 +32,14 @@ Authorization: auth_code
 }
 ```
 
-## GET /api/image/avatar
+## GET /flame/api/image/avatar
 
 处理流程：
 
 1. 从 `Authorization` 解析当前用户 ID。
 2. 查询 `user` 表。
 3. 读取 `user.avatar_url`。
-4. 拼接到本地头像目录 `assets/api/images/avatar`。
+4. 去掉路径前导斜杠后，拼接到本地头像目录 `assets/images/avatar`。
 5. 返回头像文件。
 
 成功响应：
@@ -58,12 +58,12 @@ Content-Type: image/jpeg
 | 400 | 头像路径非法 | `头像路径非法` |
 | 404 | 头像文件不存在 | `头像文件不存在` |
 
-## GET /api/image/product
+## GET /flame/api/image/product
 
 请求示例：
 
 ```http
-GET /api/image/product?filename=%2FKeep%20%E5%BC%B9%E5%8A%9B%E5%B8%A6-%E5%85%A5%E9%97%A8%E6%AC%BE.jpg
+GET /flame/api/image/product?filename=%2FKeep%20%E5%BC%B9%E5%8A%9B%E5%B8%A6-%E5%85%A5%E9%97%A8%E6%AC%BE.jpg
 Authorization: auth_code
 ```
 

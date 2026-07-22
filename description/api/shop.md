@@ -4,18 +4,18 @@
 
 | 方法 | 路径 | 是否鉴权 | 说明 |
 | --- | --- | ---: | --- |
-| GET | `/api/shop/product_info` | 是 | 获取商城可见商品列表 |
-| GET | `/api/shop/point_flow` | 是 | 获取当前用户积分流水 |
-| POST | `/api/shop/consume` | 是 | 兑换商品并写入积分流水 |
+| GET | `/flame/api/shop/product_info` | 是 | 获取商城可见商品列表 |
+| GET | `/flame/api/shop/point_flow` | 是 | 获取当前用户积分流水 |
+| POST | `/flame/api/shop/consume` | 是 | 兑换商品并写入积分流水 |
 
 ---
 
-## GET /api/shop/product_info
+## GET /flame/api/shop/product_info
 
 请求示例：
 
 ```http
-GET /api/shop/product_info
+GET /flame/api/shop/product_info
 Authorization: auth_code
 ```
 
@@ -52,17 +52,17 @@ product.status = 1
 该接口只返回商品元数据，不返回真实图片文件。前端拿到 `image_url` 后，应单独请求：
 
 ```http
-GET /api/image/product?filename={encodeURIComponent(image_url)}
+GET /flame/api/image/product?filename={encodeURIComponent(image_url)}
 ```
 
 ---
 
-## GET /api/shop/point_flow
+## GET /flame/api/shop/point_flow
 
 请求示例：
 
 ```http
-GET /api/shop/point_flow
+GET /flame/api/shop/point_flow
 Authorization: auth_code
 ```
 
@@ -114,12 +114,12 @@ point_record.product_id = product.id
 
 ---
 
-## POST /api/shop/consume
+## POST /flame/api/shop/consume
 
 请求示例：
 
 ```http
-POST /api/shop/consume
+POST /flame/api/shop/consume
 Authorization: auth_code
 Content-Type: application/json
 ```

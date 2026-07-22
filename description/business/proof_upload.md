@@ -7,23 +7,23 @@
 当前业务实现位于：
 
 ```text
-app/services/api/proof_service.py
+app/services/proof_service.py
 ```
 
 对应接口：
 
 ```text
-GET /api/proof/config
-GET /api/proof/current
-GET /api/proof/history
-POST /api/proof/upload
+GET /flame/api/proof/config
+GET /flame/api/proof/current
+GET /flame/api/proof/history
+POST /flame/api/proof/upload
 ```
 
 ## 上传配置读取
 
-`GET /api/proof/config` 用于返回项目可用的上传凭证类型。上传配置属于低频变更数据，服务层会按 `project_id` 缓存 5 分钟，并在响应中返回短期浏览器私有缓存头。
+`GET /flame/api/proof/config` 用于返回项目可用的上传凭证类型。上传配置属于低频变更数据，服务层会按 `project_id` 缓存 5 分钟，并在响应中返回短期浏览器私有缓存头。
 
-该缓存只用于读取上传窗口配置，`POST /api/proof/upload` 在写入凭证前仍会查询当前启用的 `project_upload_config`，避免关键写库逻辑依赖过期缓存。
+该缓存只用于读取上传窗口配置，`POST /flame/api/proof/upload` 在写入凭证前仍会查询当前启用的 `project_upload_config`，避免关键写库逻辑依赖过期缓存。
 
 ## 前置条件
 
@@ -64,11 +64,13 @@ proof_record.project_id
 proof_record.project_upload_config_id
 proof_record.image_url
 proof_record.note
-proof_record.review_status = pending
+proof_record.review_status = pending（待初审）
 proof_record.review_comment = NULL
 proof_record.status = 1
 proof_record.created_at
 ```
+
+`note` 为必填项。用户应填写本次运动的可审核指标，例如距离、时长、次数、配速或累计爬升；后续文本初审任务以该字段和项目等级规则作为判断输入，不向模型发送凭证图片。
 
 ## 当天重复上传
 
@@ -88,6 +90,8 @@ review_status = pending
 review_comment = NULL
 ```
 
+当天重传视为一条新的待初审内容：即使旧凭证已经初审通过，也会覆盖旧图片和备注，并清除旧审核意见。这样未来的初审任务只会依据最新的图片和 `note` 判断，不会误用旧结论。
+
 ## 事务和文件清理
 
 接口先保存图片，再写数据库。
@@ -98,8 +102,8 @@ review_comment = NULL
 
 ## 历史凭证
 
-`GET /api/proof/current` 基于当前登录用户 ID 查询当前激活赛季凭证。
-该接口返回结构与历史凭证相似，但返回的是用户上传备注 `note`，而不是审核意见 `reviewComment`。
+`GET /flame/api/proof/current` 基于当前登录用户 ID 查询当前激活赛季凭证。
+该接口返回用户上传备注 `note` 和审核意见 `reviewComment`。后者用于展示未来初审任务输出的通过依据或失败原因；未审核或未填写时返回空字符串。
 
 查询关系：
 
@@ -112,7 +116,7 @@ proof_record.project_id = project.id
 proof_record.status = 1
 ```
 
-`GET /api/proof/history` 基于当前登录用户 ID 查询过往赛季历史凭证，并排除当前激活赛季的上传记录。
+`GET /flame/api/proof/history` 基于当前登录用户 ID 查询过往赛季历史凭证，并排除当前激活赛季的上传记录。
 
 当前激活赛季 ID 由服务运行时缓存 `CurrentSeasonRuntime` 提供。缓存未初始化时，接口会先读取当前激活赛季并写入缓存。
 
@@ -128,7 +132,7 @@ proof_record.status = 1
 ```
 
 返回给前端时，凭证文件名会去掉系统生成前缀，只保留用户上传文件主名。
-每条历史凭证会同时返回 `reviewStatus`，便于前端展示待审核、通过或拒绝状态。
+每条历史凭证会同时返回 `reviewStatus`，便于前端展示待初审、初审结论或终审结论。
 
 示例：
 

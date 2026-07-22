@@ -67,10 +67,10 @@ user_id
 当前计算口径为：
 
 ```text
-当前 season_user_id 下，status = 1 的 proof_record 数量
+当前 season_user_id 下，status = 1 且已初审通过的 proof_record 数量
 ```
 
-由于平台采用月末统一审核模式，赛季期间大量凭证尚未审核，因此排行榜不依赖 `review_status = approved`，而是统计有效上传记录数量。
+统计的审核状态为 `preliminary_approved`、`approved` 和 `rejected`。其中后两者表示赛后终审结果；它们都曾初审通过，因此不回溯改变赛季内排行榜。`pending` 和 `preliminary_rejected` 不计入。
 
 ---
 

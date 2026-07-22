@@ -5,3 +5,6 @@ asyncmy
 pydantic-settings
 greenlet
 python-multipart
+httpx
+openai
+Pillow

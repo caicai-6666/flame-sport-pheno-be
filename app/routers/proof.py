@@ -60,7 +60,7 @@ async def upload_project_proof(
     project_id: int = Form(..., ge=1),
     project_upload_config_id: int = Form(..., ge=1),
     record_type: str | None = Form(default=None),
-    note: str | None = Form(default=None),
+    note: str = Form(...),
     image: UploadFile = File(...),
     user_id: str = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_session),

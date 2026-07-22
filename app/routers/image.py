@@ -1,3 +1,5 @@
+import mimetypes
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,7 +32,8 @@ async def get_avatar(
 
     return FileResponse(
         path=image_path,
-        media_type="image/jpeg",
+        media_type=mimetypes.guess_type(image_path.name)[0]
+        or "application/octet-stream",
         filename=image_path.name,
     )
 

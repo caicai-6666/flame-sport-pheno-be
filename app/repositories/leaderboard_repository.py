@@ -1,11 +1,16 @@
 from datetime import datetime
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.models.department import Department
 from app.models.leaderboard_snapshot import LeaderboardSnapshot
+from app.models.project_upload_config import (
+    MONTH_END_RECORD_TYPE,
+    MONTH_START_RECORD_TYPE,
+)
+from app.models.proof_record import LEADERBOARD_ELIGIBLE_REVIEW_STATUSES
 from app.models.season_user import SeasonUser
 from app.models.user import User
 
@@ -21,6 +26,7 @@ class LeaderboardRepository:
     ) -> None:
         """全量替换当前赛季排行榜快照。"""
         # 先清理当前赛季旧快照，再重新写入，避免用户资格变化后留下脏数据。
+        # 排行榜以初审结果为准；赛季结束后的终审不回溯改变赛季内打卡次数。
         await session.execute(
             text(
                 """
@@ -39,24 +45,53 @@ class LeaderboardRepository:
                 INSERT INTO leaderboard_snapshot (season_user_id, checkin_count)
                 SELECT
                   season_user.id AS season_user_id,
-                  COUNT(proof_record.id) AS checkin_count
+                  COALESCE(
+                    SUM(
+                      CASE
+                        WHEN proof_record.id IS NULL THEN 0
+                        WHEN project_upload_config.record_type IN (
+                          :month_start_record_type,
+                          :month_end_record_type
+                        ) THEN 0
+                        ELSE 1
+                      END
+                    ),
+                    0
+                  )
+                  + COUNT(
+                    DISTINCT CASE
+                      WHEN project_upload_config.record_type = :month_end_record_type
+                      THEN proof_record.project_id
+                    END
+                  ) AS checkin_count
                 FROM season_user
                 LEFT JOIN proof_record
                   ON proof_record.season_user_id = season_user.id
                   AND proof_record.status = 1
+                  AND proof_record.review_status IN :eligible_review_statuses
                   AND proof_record.created_at >= :season_start_at
                   AND proof_record.created_at < :cutoff_at
+                LEFT JOIN project_upload_config
+                  ON project_upload_config.id = proof_record.project_upload_config_id
                 WHERE season_user.season_id = :season_id
                   AND season_user.level_id IS NOT NULL
                   AND season_user.status >= :required_project_count
                 GROUP BY season_user.id
                 """
+            ).bindparams(
+                bindparam("eligible_review_statuses", expanding=True),
             ),
             {
                 "season_id": season_id,
                 "required_project_count": required_project_count,
                 "season_start_at": season_start_at,
                 "cutoff_at": cutoff_at,
+                "eligible_review_statuses": tuple(
+                    review_status.value
+                    for review_status in LEADERBOARD_ELIGIBLE_REVIEW_STATUSES
+                ),
+                "month_start_record_type": MONTH_START_RECORD_TYPE,
+                "month_end_record_type": MONTH_END_RECORD_TYPE,
             },
         )
 

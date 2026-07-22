@@ -4,6 +4,8 @@
 
 `season_user_project` 表用于记录用户在某个赛季中选择并锁定的运动项目。
 
+每条有效锁定记录还保存该项目在本赛季的完成进度。进度由后续的每日初审任务依据用户填写的运动指标累积，取值始终在 `0` 到 `1` 之间。
+
 当前平台中，用户在每个赛季需要选择指定数量的运动项目，并在达到当前赛季要求后选择统一的挑战等级。  
 该表对应项目首页中的“选择项目 / 锁定项目”逻辑。
 
@@ -23,6 +25,7 @@
 | id             | BIGINT UNSIGNED  |       是 |   自增 | 赛季用户项目记录主键 ID                |
 | season_user_id | BIGINT UNSIGNED  |       是 |     无 | 赛季用户记录 ID，关联 `season_user.id` |
 | project_id     | BIGINT UNSIGNED  |       是 |     无 | 项目 ID，关联 `project.id`             |
+| completion_progress | DECIMAL(5,4) | 是 | 0.0000 | 本赛季该项目完成进度，范围 `0`～`1` |
 | status         | TINYINT UNSIGNED |       是 |      1 | 状态：`1` 已锁定，`0` 无效/取消        |
 
 ---
@@ -96,6 +99,21 @@
 
 ---
 
+### completion_progress
+
+本赛季该锁定项目的完成进度，范围为：
+
+```text
+0.0000 = 尚未完成任何有效进度
+1.0000 = 已完成该项目本赛季目标
+```
+
+字段使用 `DECIMAL(5,4)` 而不是浮点类型，避免多次累计时产生二进制浮点精度误差。数据库通过 `CHECK` 约束保证值不会小于 `0` 或大于 `1`。
+
+用户锁定项目时默认写入 `0.0000`。未来每日初审任务仅处理前一日仍为待初审的凭证；初审通过后，在同一事务中更新凭证审核状态和本字段。赛后终审不回溯修改进度。
+
+---
+
 ## MySQL 建表语句
 
 ```sql
@@ -103,15 +121,28 @@ CREATE TABLE season_user_project (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '赛季用户项目记录ID',
   season_user_id BIGINT UNSIGNED NOT NULL COMMENT '赛季用户记录ID',
   project_id BIGINT UNSIGNED NOT NULL COMMENT '项目ID',
+  completion_progress DECIMAL(5,4) NOT NULL DEFAULT 0.0000 COMMENT '本赛季项目完成进度：0未完成，1已完成',
   status TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '状态：1已锁定，0无效/取消',
   PRIMARY KEY (id),
   UNIQUE KEY uk_season_user_project (season_user_id, project_id),
   KEY idx_season_user_project_season_user_id (season_user_id),
   KEY idx_season_user_project_project_id (project_id),
   KEY idx_season_user_project_status (status),
+  CONSTRAINT chk_season_user_project_completion_progress
+    CHECK (completion_progress >= 0 AND completion_progress <= 1),
   CONSTRAINT fk_season_user_project_season_user
     FOREIGN KEY (season_user_id) REFERENCES season_user(id),
   CONSTRAINT fk_season_user_project_project
     FOREIGN KEY (project_id) REFERENCES project(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='赛季用户项目表';
+```
+
+## 现有数据库迁移 SQL
+
+```sql
+ALTER TABLE season_user_project
+  ADD COLUMN completion_progress DECIMAL(5,4) NOT NULL DEFAULT 0.0000
+    COMMENT '本赛季项目完成进度：0未完成，1已完成' AFTER project_id,
+  ADD CONSTRAINT chk_season_user_project_completion_progress
+    CHECK (completion_progress >= 0 AND completion_progress <= 1);
 ```

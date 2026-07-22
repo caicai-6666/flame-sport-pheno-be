@@ -65,6 +65,34 @@ class ProjectService:
             season_user_id=season_user.id,
         )
 
+    async def list_locked_project_progress(
+        self,
+        season_id: int,
+        user_id: str,
+        session: AsyncSession,
+    ) -> list[dict[str, float | int]]:
+        """查询用户在指定赛季已锁定项目的完成进度。"""
+        season_user = await season_user_repository.get_by_season_id_and_user_id(
+            session=session,
+            season_id=season_id,
+            user_id=user_id,
+        )
+        if season_user is None or season_user.id is None:
+            return []
+
+        locked_projects = await season_user_repository.list_locked_projects_with_progress(
+            session=session,
+            season_user_id=season_user.id,
+        )
+        return [
+            {
+                "project_id": locked_project.project_id,
+                # Decimal 用于数据库精确累计；接口返回 JSON number 便于前端展示百分比。
+                "completion_progress": float(locked_project.completion_progress),
+            }
+            for locked_project in locked_projects
+        ]
+
     async def lock_project(
         self,
         season_id: int,

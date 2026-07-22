@@ -9,7 +9,7 @@
 当前商品列表接口：
 
 ```text
-GET /api/shop/product_info
+GET /flame/api/shop/product_info
 ```
 
 接口查询 `product.status = 1` 的可见商品，并返回：
@@ -22,7 +22,7 @@ points_required
 image_url
 ```
 
-该接口不返回真实图片文件。前端拿到 `image_url` 后，再请求 `/api/image/product` 获取图片。
+该接口不返回真实图片文件。前端拿到 `image_url` 后，再请求 `/flame/api/image/product` 获取图片。
 
 ## 商品图片
 
@@ -43,7 +43,7 @@ assets/api/images/product
 前端请求示例：
 
 ```text
-GET /api/image/product?filename={encodeURIComponent(product.image_url)}
+GET /flame/api/image/product?filename={encodeURIComponent(product.image_url)}
 ```
 
 ## 积分流水
@@ -51,7 +51,7 @@ GET /api/image/product?filename={encodeURIComponent(product.image_url)}
 当前积分流水接口：
 
 ```text
-GET /api/shop/point_flow
+GET /flame/api/shop/point_flow
 ```
 
 接口基于当前登录 `user_id` 查询 `point_record.status = 1` 的有效积分流水，并左连接 `product` 获取商品名称。
@@ -76,7 +76,7 @@ created_at
 当前商品兑换接口：
 
 ```text
-POST /api/shop/consume
+POST /flame/api/shop/consume
 ```
 
 请求体传入：

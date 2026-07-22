@@ -1,8 +1,26 @@
 import re
+from dataclasses import dataclass
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
+from uuid import uuid4
+
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from app.core.config import settings
+
+
+@dataclass(frozen=True)
+class SavedAvatarImage:
+    """本次头像覆盖前的状态，用于数据库事务失败时恢复文件。"""
+
+    path: Path
+    previous_content: bytes | None
+
+    @property
+    def url(self) -> str:
+        """数据库保存的头像相对路径。"""
+        return f"/{self.path.name}"
 
 
 def ensure_asset_directories() -> None:
@@ -30,6 +48,67 @@ def build_proof_record_image_path(
     safe_timestamp = _normalize_proof_record_timestamp(timestamp)
     safe_filename = _normalize_proof_record_filename(filename)
     return season_dir / f"{safe_user_id}-{project_id}-{safe_timestamp}-{safe_filename}.jpg"
+
+
+def save_avatar_image(
+    *,
+    user_id: str,
+    content: bytes,
+) -> SavedAvatarImage:
+    """将钉钉头像统一转为 JPEG 后按用户 ID 保存，并保留旧文件以支持事务补偿。"""
+    if not content:
+        raise ValueError("头像图片不能为空")
+
+    settings.AVATAR_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    safe_user_id = _normalize_path_part(user_id)
+    image_path = settings.AVATAR_IMAGE_DIR / f"{safe_user_id}.jpg"
+    previous_content = image_path.read_bytes() if image_path.is_file() else None
+    _write_bytes_atomically(
+        path=image_path,
+        content=_convert_avatar_to_jpeg(content),
+    )
+    return SavedAvatarImage(
+        path=image_path,
+        previous_content=previous_content,
+    )
+
+
+def restore_avatar_image(saved_avatar: SavedAvatarImage) -> None:
+    """恢复头像覆盖前的状态，避免失败初始化留下无主文件。"""
+    if saved_avatar.previous_content is None:
+        saved_avatar.path.unlink(missing_ok=True)
+        return
+    _write_bytes_atomically(
+        path=saved_avatar.path,
+        content=saved_avatar.previous_content,
+    )
+
+
+def _write_bytes_atomically(*, path: Path, content: bytes) -> None:
+    """先写入同目录临时文件，再原子替换，避免请求中途读到半张头像。"""
+    temporary_path = path.parent / f".{path.name}.{uuid4().hex}.tmp"
+    try:
+        temporary_path.write_bytes(content)
+        temporary_path.replace(path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def _convert_avatar_to_jpeg(content: bytes) -> bytes:
+    """解码远端图片并重编码为标准 JPEG，确保后缀和真实格式一致。"""
+    try:
+        with Image.open(BytesIO(content)) as source_image:
+            normalized_image = ImageOps.exif_transpose(source_image).convert("RGB")
+            output = BytesIO()
+            normalized_image.save(
+                output,
+                format="JPEG",
+                quality=90,
+                optimize=True,
+            )
+            return output.getvalue()
+    except (OSError, UnidentifiedImageError) as exc:
+        raise ValueError("头像图片无法转换为 JPEG") from exc
 
 
 def _normalize_proof_record_timestamp(timestamp: datetime | int | str) -> str:
