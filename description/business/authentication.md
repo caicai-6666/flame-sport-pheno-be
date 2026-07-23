@@ -30,7 +30,7 @@ auth_code -> userId
 
 本地不存在 `user` 时，服务端使用同一个钉钉应用 access token 继续查询：
 
-1. 员工详情：获取 `userId`、`name`、`avatar` 和 `dept_id_list`。
+1. 员工详情：获取 `userId`、`name`、`avatar` 和 `dept_id_list`。姓名按空白字符切分后仅保留第一个片段作为本地 `user.name`；例如钉钉返回 `James 蔡昌言` 时本地保存并展示 `James`。
 2. 员工部门列表的第一个部门详情：同步部门 ID 和名称。
 3. 若钉钉返回头像地址，下载 JPEG、PNG 或 WebP 图片并统一转换为 JPEG 后保存到本地 `assets/images/avatar/`；文件名使用安全化后的 `userId` 加小写 `.jpg`，例如 `james.jpg`，`user.avatar_url` 保存为 `/james.jpg`。
 4. 在一个数据库事务中创建不存在的 `department` 与 `user`，随后才写入认证缓存。数据库初始化失败时会恢复本次覆盖前的头像文件。

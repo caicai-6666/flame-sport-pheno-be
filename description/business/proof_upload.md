@@ -43,7 +43,7 @@ project_upload_config.status = 1
 凭证图片保存到：
 
 ```text
-assets/api/images/api/proof_record/{season_id}
+assets/images/proof_record/{season_id}
 ```
 
 文件名规则：
@@ -53,6 +53,8 @@ assets/api/images/api/proof_record/{season_id}
 ```
 
 数据库 `proof_record.image_url` 当前只保存完整文件名。
+
+读取到激活赛季时，服务会预先创建该赛季 ID 对应的凭证目录；上传时也会再次确保目录存在，避免目录被手动清理后造成写入失败。
 
 ## 写库规则
 

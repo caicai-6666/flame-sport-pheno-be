@@ -12,6 +12,7 @@ from app.core.dingtalk import (
     start_dingtalk_access_token_refresh_task,
     stop_dingtalk_access_token_refresh_task,
 )
+from app.core.database import init_db
 from app.core.leaderboard_scheduler import (
     start_leaderboard_refresh_task,
     stop_leaderboard_refresh_task,
@@ -29,6 +30,8 @@ API_PREFIX = "/flame/api"
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     """应用生命周期：启动时初始化目录和后台任务，关闭时清理后台任务。"""
+    # Compose 的全新 MySQL 卷没有预建表，先完成建表再启动会访问业务表的后台任务。
+    await init_db()
     ensure_asset_directories()
     start_auth_cache_cleanup_task()
     start_dingtalk_access_token_refresh_task()

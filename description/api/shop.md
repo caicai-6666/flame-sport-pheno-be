@@ -28,7 +28,7 @@ Authorization: auth_code
     "name": "Keep 弹力带-入门款",
     "description": "适合热身、拉伸和基础力量训练。",
     "points_required": 30,
-    "image_url": "/Keep 弹力带-入门款.jpg"
+    "image_url": "/Keep 弹力带.jpg"
   }
 ]
 ```

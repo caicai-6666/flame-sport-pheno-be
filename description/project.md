@@ -149,6 +149,7 @@ API 契约 -> Router -> Service -> Repository -> Model/DB 文档 -> 业务规则
 
 - [`local_run.md`](dev/local_run.md)
 - [`mysql_docker.md`](dev/mysql_docker.md)
+- [`docker_compose.md`](dev/docker_compose.md)
 - [`assets.md`](dev/assets.md)
 - [`mock_data.md`](dev/mock_data.md)
 - [`documentation.md`](dev/documentation.md)

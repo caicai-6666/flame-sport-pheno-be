@@ -1,5 +1,6 @@
 import base64
 import json
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import HTTPException, status
@@ -227,6 +228,8 @@ class ProjectService:
                 )
 
             season_user.level_id = project_rule_level_id
+            # 锁定等级才代表正式报名；与等级写入同一事务，避免产生无报名时间的正式参与记录。
+            season_user.participated_at = datetime.now()
             await session.commit()
             return {"code": 200}
         except HTTPException:

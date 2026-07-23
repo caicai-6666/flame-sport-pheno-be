@@ -29,6 +29,7 @@
 | season_id    | BIGINT UNSIGNED  |       是 |     无 | 赛季 ID，关联 `season.id`                         |
 | user_id      | VARCHAR(64)      |       是 |     无 | 用户 ID，关联 `user.id`                           |
 | level_id     | BIGINT UNSIGNED  |       否 |   NULL | 用户本赛季选择的项目等级，关联 `project_level.id` |
+| participated_at | DATETIME      |       否 |   NULL | 首次成功锁定挑战等级的正式报名时间 |
 | final_points | INT UNSIGNED     |       否 |   NULL | 用户本赛季最终获得的积分                          |
 | status       | TINYINT UNSIGNED |       是 |      0 | 已锁定项目数量，用于判断用户是否满足当前赛季参与要求 |
 
@@ -91,6 +92,19 @@
 
 ---
 
+### participated_at
+
+用户首次成功锁定挑战等级时写入的正式报名时间。该字段与 `level_id` 在同一事务中更新，因此：
+
+```text
+level_id IS NULL        -> participated_at 必须为 NULL
+level_id IS NOT NULL    -> 新产生的记录 participated_at 必须有值
+```
+
+历史数据迁移后无法准确还原原始报名时间时保留 `NULL`，不使用迁移执行时间伪造数据。
+
+---
+
 ### final_points
 
 用户本赛季最终获得的积分。
@@ -143,6 +157,7 @@ CREATE TABLE season_user (
   season_id BIGINT UNSIGNED NOT NULL COMMENT '赛季ID',
   user_id VARCHAR(64) NOT NULL COMMENT '用户ID',
   level_id BIGINT UNSIGNED DEFAULT NULL COMMENT '项目等级ID',
+  participated_at DATETIME DEFAULT NULL COMMENT '正式报名时间（首次锁定挑战等级时写入）',
   final_points INT UNSIGNED DEFAULT NULL COMMENT '赛季最终获得积分，NULL表示尚未结算',
   status TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '已锁定项目数量',
   PRIMARY KEY (id),
@@ -150,6 +165,7 @@ CREATE TABLE season_user (
   KEY idx_season_user_season_id (season_id),
   KEY idx_season_user_user_id (user_id),
   KEY idx_season_user_level_id (level_id),
+  KEY idx_season_user_participated_at (participated_at),
   KEY idx_season_user_status (status),
   CONSTRAINT fk_season_user_season
     FOREIGN KEY (season_id) REFERENCES season(id),

@@ -11,6 +11,8 @@ assets/
     proof_record/
 ```
 
+本地直接运行时，资源位于后端仓库的 `assets/`。Docker Compose 部署时，该目录在容器内仍为 `/app/assets`，但实际由具名卷 `backend_assets` 持久化，以避免频繁拉取或重建后端工作区影响上传文件。
+
 ## avatar
 
 用户头像目录：
@@ -76,7 +78,7 @@ GET /api/image/product?filename={encodeURIComponent(product.image_url)}
 凭证图片目录：
 
 ```text
-assets/api/images/api/proof_record/{season_id}
+assets/images/proof_record/{season_id}
 ```
 
 上传接口生成的文件名：
@@ -90,6 +92,8 @@ assets/api/images/api/proof_record/{season_id}
 ```text
 bb123456-3-20260606090020-健身.jpg
 ```
+
+确认激活赛季时会自动创建对应的 `{season_id}` 子目录；上传时会再次检查，以支持资源目录被运维清理后的恢复。
 
 ## 路径安全
 

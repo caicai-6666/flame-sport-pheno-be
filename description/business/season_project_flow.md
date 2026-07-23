@@ -28,6 +28,8 @@ required_project_count
 
 写入进程内运行时缓存。
 
+当没有 `status = 1` 的赛季时，当前赛季查询会返回 `404`。排行榜启动刷新和定时刷新则会跳过本次执行并记录普通信息日志；没有激活赛季是冷启动和赛季切换空窗期的正常状态，不会导致应用启动失败。
+
 ## 项目锁定
 
 用户锁定项目时：
@@ -55,7 +57,10 @@ project_level.status = 1
 
 ```text
 season_user.level_id = project_rule_level_id
+season_user.participated_at = 当前时间
 ```
+
+`participated_at` 仅在首次成功锁定等级时写入，代表用户正式报名时间；只锁定项目时保持为空。
 
 ## 正式参与判断
 
@@ -67,6 +72,10 @@ season_user.level_id IS NOT NULL
 ```
 
 这意味着用户只锁定项目但没有锁定挑战等级时，还不算正式参与。
+
+## 报名时间与抢先参与
+
+`SEASON_PARTICIPATION_ALLOWED_DAYS` 控制赛季开始后的报名窗口。开始日前已被后台激活的赛季允许用户抢先参与，不受该天数限制；从开始日当天起计算，开始后第 `N` 天（含）仍可参与，第 `N + 1` 天起未正式参与的用户会被拒绝。默认 `N = 7`。
 
 ## 项目完成进度
 

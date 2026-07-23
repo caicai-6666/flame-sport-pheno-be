@@ -181,3 +181,5 @@ Authorization: auth_code
 ```
 
 用户必须先锁满当前赛季要求数量的项目，且当前赛季尚未锁定等级。
+
+成功锁定等级即视为正式报名，服务会在同一事务中写入 `season_user.participated_at`。

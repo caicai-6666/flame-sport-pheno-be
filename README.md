@@ -73,7 +73,7 @@ router -> service -> repository -> model
 - API 根路径：`http://127.0.0.1:8000/flame/api/`
 - OpenAPI 文档：`http://127.0.0.1:8000/flame/api/docs`
 
-MySQL Docker 环境的构建和启动方式见 [`description/dev/mysql_docker.md`](description/dev/mysql_docker.md)。
+MySQL Docker 环境的构建和启动方式见 [`description/dev/mysql_docker.md`](description/dev/mysql_docker.md)。前后端与 MySQL 的统一部署方式见 [`description/dev/docker_compose.md`](description/dev/docker_compose.md)。
 
 ## 项目文档
 
