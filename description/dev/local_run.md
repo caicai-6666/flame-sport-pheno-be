@@ -38,6 +38,22 @@ mysql+asyncmy://flame:flame123456@127.0.0.1:3307/flame_sport_pheno?charset=utf8m
 
 可通过 `.env` 覆盖。
 
+## 登录模式
+
+默认使用生产模式：
+
+```text
+APP_MODE=production
+```
+
+生产模式调用钉钉企业内部 H5 免登。需要本地联调而不访问钉钉时，改为：
+
+```text
+APP_MODE=development
+```
+
+开发模式下，`POST /flame/api/auth/login` 的 `auth_code` 直接作为本地 `user.id` 查询；用户存在且启用时，服务端写入 `auth_code -> user.id` 缓存并原样返回 `auth_code`。因此前端应传入一个已经存在的用户 ID。开发模式不发起钉钉用户查询，也不启动钉钉 token 预热任务。
+
 钉钉企业内部 H5 微应用登录还需要在 `.env` 中配置：
 
 ```text
@@ -116,7 +132,7 @@ uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 1. 为当前数据库创建缺失的数据表（不会修改已有表结构）。
 2. 创建本地资源目录。
 3. 启动认证缓存过期清理任务。
-4. 配置钉钉凭证时，启动应用 access token 定时预热任务。
+4. 在 `APP_MODE=production` 时启动应用 access token 定时预热任务。
 5. 启动排行榜快照刷新任务。
 6. 按配置启动每日文本初审任务。
 7. 注册所有路由。

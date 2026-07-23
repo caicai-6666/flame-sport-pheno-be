@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,6 +13,8 @@ class Settings(BaseSettings):
     )
 
     PROJECT_NAME: str = "flame-sport-pheno-be"
+    # 生产模式使用钉钉免登；开发模式仅以 auth_code 查询本地 user.id。
+    APP_MODE: Literal["production", "development"] = "production"
     BASE_DIR: Path = Path(__file__).resolve().parents[2]
     ASSETS_DIR: Path = BASE_DIR / "assets"
     IMAGE_ASSETS_DIR: Path = ASSETS_DIR / "images"

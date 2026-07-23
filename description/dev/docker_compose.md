@@ -36,6 +36,23 @@ MySQL 的外部连接地址为 `127.0.0.1:3307`（远程机器使用部署主机
 docker compose up -d --build
 ```
 
+## 切换登录模式
+
+顶层 `.env` 的 `APP_MODE` 会仅注入后端容器：
+
+```text
+APP_MODE=production   # 默认，钉钉企业内部 H5 免登
+APP_MODE=development  # auth_code 直接匹配数据库 user.id
+```
+
+切换后重建后端即可：
+
+```bash
+docker compose up -d --build backend
+```
+
+开发模式不调用钉钉；前端仍调用原有登录接口，但应传入数据库中已有启用用户的 `user.id` 作为 `auth_code`。该设置只影响后端登录解析方式，不会修改前端构建配置。
+
 查看状态和日志：
 
 ```bash
