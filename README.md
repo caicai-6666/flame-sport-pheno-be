@@ -1,4 +1,4 @@
-# flame-sport-pheno-be
+# Flame Sport Pheno
 
 企业运动赛季平台的后端服务，基于 FastAPI 和异步 MySQL 实现。项目当前覆盖用户登录、赛季参与、运动项目选择、凭证上传、排行榜快照、用户积分和商品兑换等核心流程。
 
