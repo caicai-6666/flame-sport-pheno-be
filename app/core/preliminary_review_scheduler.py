@@ -1,9 +1,8 @@
-"""每日 DeepSeek 初审任务。"""
+"""定时筛查待审凭证的 DeepSeek 初审任务。"""
 
 import asyncio
 import logging
-from datetime import datetime, time, timedelta
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from datetime import datetime, timedelta
 
 from app.core.config import settings
 from app.core.database import async_session_factory
@@ -16,31 +15,17 @@ logger = logging.getLogger(__name__)
 _review_task: asyncio.Task[None] | None = None
 
 
-def _parse_daily_time(value: str) -> time:
-    """解析 HH:MM 格式，避免错误配置造成紧密循环。"""
-    try:
-        return time.fromisoformat(value)
-    except ValueError as exc:
-        raise ValueError(
-            "LLM_PRELIMINARY_REVIEW_DAILY_TIME 必须是 HH:MM 格式",
-        ) from exc
+def _validate_scheduler_config() -> None:
+    """校验间隔与最小等待时间，避免错误配置导致紧密调用模型。"""
+    if settings.LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS <= 0:
+        raise ValueError("LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS 必须大于 0")
+    if settings.LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS < 0:
+        raise ValueError("LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS 不能小于 0")
 
 
-def _get_timezone() -> ZoneInfo:
-    try:
-        return ZoneInfo(settings.LLM_PRELIMINARY_REVIEW_TIMEZONE)
-    except ZoneInfoNotFoundError as exc:
-        raise ValueError(
-            "LLM_PRELIMINARY_REVIEW_TIMEZONE 不是有效 IANA 时区",
-        ) from exc
-
-
-def _next_run_at(now: datetime, scheduled_time: time) -> datetime:
-    """计算严格晚于当前时刻的下一次本地执行时间。"""
-    scheduled_at = datetime.combine(now.date(), scheduled_time, tzinfo=now.tzinfo)
-    if scheduled_at <= now:
-        scheduled_at += timedelta(days=1)
-    return scheduled_at
+def _build_cutoff_at(now: datetime) -> datetime:
+    """计算本轮可审核的最晚上传时间。"""
+    return now - timedelta(seconds=settings.LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS)
 
 
 async def _review_once() -> None:
@@ -50,10 +35,8 @@ async def _review_once() -> None:
         logger.warning("preliminary review skipped: current season runtime is empty")
         return
 
-    timezone = _get_timezone()
-    local_now = datetime.now(timezone)
-    # 数据库 DATETIME 保存本地时间；审核当天上传的凭证留到下一次任务处理。
-    cutoff_at = datetime.combine(local_now.date(), time.min)
+    # 数据库 DATETIME 保存本地时间。最小等待时间留给用户重传，避免刚上传就被模型审核。
+    cutoff_at = _build_cutoff_at(datetime.now())
     async with async_session_factory() as session:
         summary = await preliminary_review_service.review_pending_current_season(
             session=session,
@@ -77,37 +60,33 @@ async def _review_once_safely() -> None:
     try:
         await _review_once()
     except Exception:
-        logger.exception("daily preliminary review failed")
+        logger.exception("scheduled preliminary review failed")
 
 
 async def _review_loop() -> None:
-    timezone = _get_timezone()
-    scheduled_time = _parse_daily_time(settings.LLM_PRELIMINARY_REVIEW_DAILY_TIME)
+    interval_seconds = settings.LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS
     while True:
-        now = datetime.now(timezone)
-        next_run_at = _next_run_at(now=now, scheduled_time=scheduled_time)
-        await asyncio.sleep((next_run_at - now).total_seconds())
+        await asyncio.sleep(interval_seconds)
         await _review_once_safely()
 
 
 def start_preliminary_review_task() -> None:
-    """按配置启动每日初审，不在应用启动时立即补跑。"""
+    """按配置启动定时初审，不在应用启动时立即补跑。"""
     global _review_task
     if not settings.LLM_PRELIMINARY_REVIEW_ENABLED:
         return
     if _review_task is not None and not _review_task.done():
         return
     try:
-        _get_timezone()
-        _parse_daily_time(settings.LLM_PRELIMINARY_REVIEW_DAILY_TIME)
+        _validate_scheduler_config()
     except ValueError:
-        logger.exception("daily preliminary review task is disabled by invalid config")
+        logger.exception("scheduled preliminary review task is disabled by invalid config")
         return
     _review_task = asyncio.create_task(_review_loop())
 
 
 async def stop_preliminary_review_task() -> None:
-    """停止每日初审任务。"""
+    """停止定时初审任务。"""
     global _review_task
     if _review_task is None:
         return

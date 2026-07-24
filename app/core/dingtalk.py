@@ -144,7 +144,9 @@ class DingTalkClient:
             field_name="name",
             operation_name="钉钉用户详情",
         )
-        if len(name) > 64:
+        # 企业通讯录常将英文名和中文名以空白分隔，本地展示只保留首个名称片段。
+        display_name = name.split(maxsplit=1)[0]
+        if len(display_name) > 64:
             raise DingTalkRequestError("钉钉用户姓名长度超出本地限制")
 
         avatar_value = result.get("avatar")
@@ -169,7 +171,7 @@ class DingTalkClient:
 
         return DingTalkUserProfile(
             user_id=returned_user_id,
-            name=name,
+            name=display_name,
             avatar_source_url=avatar_source_url or None,
             department_ids=tuple(department_ids),
         )

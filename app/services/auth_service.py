@@ -3,6 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth_cache import auth_cache
+from app.core.config import settings
 from app.core.storage import (
     SavedAvatarImage,
     restore_avatar_image,
@@ -50,7 +51,7 @@ class AuthService:
         auth_code: str,
         session: AsyncSession,
     ) -> str:
-        """校验 auth_code 对应的用户，成功后写入认证缓存。"""
+        """按运行模式解析用户，成功后写入认证缓存。"""
         normalized_auth_code = auth_code.strip()
         if not normalized_auth_code:
             raise HTTPException(
@@ -58,11 +59,21 @@ class AuthService:
                 detail="auth_code 不能为空",
             )
 
-        user_id = await self._resolve_user_id_from_auth_code(
-            auth_code=normalized_auth_code,
+        # 开发模式复用既有请求字段和缓存结构，避免为本地联调请求钉钉。
+        user_id = (
+            normalized_auth_code
+            if settings.APP_MODE == "development"
+            else await self._resolve_user_id_from_auth_code(
+                auth_code=normalized_auth_code,
+            )
         )
         user = await user_repository.get_by_id(session=session, user_id=user_id)
         if user is None:
+            if settings.APP_MODE == "development":
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="开发登录用户不存在",
+                )
             try:
                 user = await self._initialize_user_from_dingtalk(
                     user_id=user_id,

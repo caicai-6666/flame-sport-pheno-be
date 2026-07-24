@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlmodel import Field, SQLModel
 
 
@@ -10,5 +12,6 @@ class SeasonUser(SQLModel, table=True):
     season_id: int
     user_id: str = Field(max_length=64)
     level_id: int | None = None
+    participated_at: datetime | None = None
     final_points: int | None = None
     status: int = Field(default=0)

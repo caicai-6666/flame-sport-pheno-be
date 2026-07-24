@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,6 +13,8 @@ class Settings(BaseSettings):
     )
 
     PROJECT_NAME: str = "flame-sport-pheno-be"
+    # 生产模式使用钉钉免登；开发模式仅以 auth_code 查询本地 user.id。
+    APP_MODE: Literal["production", "development"] = "production"
     BASE_DIR: Path = Path(__file__).resolve().parents[2]
     ASSETS_DIR: Path = BASE_DIR / "assets"
     IMAGE_ASSETS_DIR: Path = ASSETS_DIR / "images"
@@ -34,12 +37,12 @@ class Settings(BaseSettings):
     DEEPSEEK_HTTP_TIMEOUT_SECONDS: float = 60.0
     # 初审任务默认关闭，避免仅配置密钥后即在部署环境产生模型调用费用。
     LLM_PRELIMINARY_REVIEW_ENABLED: bool = False
-    LLM_PRELIMINARY_REVIEW_DAILY_TIME: str = "02:00"
-    LLM_PRELIMINARY_REVIEW_TIMEZONE: str = "Asia/Shanghai"
+    LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS: int = 900
+    LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS: int = 300
     SEASON_PARTICIPATION_ALLOWED_DAYS: int = 7
     LEADERBOARD_REFRESH_ENABLED: bool = True
     LEADERBOARD_REFRESH_ON_STARTUP: bool = True
-    LEADERBOARD_REFRESH_INTERVAL_SECONDS: int = 86400
+    LEADERBOARD_REFRESH_INTERVAL_SECONDS: int = 900
 
 
 settings = Settings()

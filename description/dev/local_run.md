@@ -38,6 +38,22 @@ mysql+asyncmy://flame:flame123456@127.0.0.1:3307/flame_sport_pheno?charset=utf8m
 
 可通过 `.env` 覆盖。
 
+## 登录模式
+
+默认使用生产模式：
+
+```text
+APP_MODE=production
+```
+
+生产模式调用钉钉企业内部 H5 免登。需要本地联调而不访问钉钉时，改为：
+
+```text
+APP_MODE=development
+```
+
+开发模式下，`POST /flame/api/auth/login` 的 `auth_code` 直接作为本地 `user.id` 查询；用户存在且启用时，服务端写入 `auth_code -> user.id` 缓存并原样返回 `auth_code`。因此前端应传入一个已经存在的用户 ID。开发模式不发起钉钉用户查询，也不启动钉钉 token 预热任务。
+
 钉钉企业内部 H5 微应用登录还需要在 `.env` 中配置：
 
 ```text
@@ -58,7 +74,7 @@ DINGTALK_ACCESS_TOKEN_REFRESH_SKEW_SECONDS=300
 
 应用获取 token 成功时会在 Uvicorn 控制台输出有效期；失败时会输出安全的 HTTP 状态码和钉钉错误码（例如 `invalidClientIdOrSecret`），不会输出 ClientSecret 或真实 access token。
 
-### DeepSeek 文本初审与手动评测
+### DeepSeek 定时文本初审与手动评测
 
 `tests/test_llm_sport_evaluation.py` 是手动运行的提示词评测脚本，用于验证“项目规则 + 用户 note”生成初审结论、进度增量和审核理由的效果。它通过 `openai.AsyncOpenAI` 调用 DeepSeek 的 OpenAI 兼容接口。
 
@@ -70,15 +86,15 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-v4-flash
 ```
 
-每日初审服务默认关闭。启用后，它只审核 `CurrentSeasonRuntime.season_id` 对应赛季、执行日零点前仍为 `pending` 的有效凭证；模型失败的记录保留待审，次日自动补审：
+定时初审服务默认关闭。启用后，它按固定间隔筛查 `CurrentSeasonRuntime.season_id` 对应赛季中仍为 `pending` 的有效凭证；模型失败的记录保留待审，下一次定时任务自动补审：
 
 ```text
 LLM_PRELIMINARY_REVIEW_ENABLED=true
-LLM_PRELIMINARY_REVIEW_DAILY_TIME=02:00
-LLM_PRELIMINARY_REVIEW_TIMEZONE=Asia/Shanghai
+LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS=900
+LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS=300
 ```
 
-`LLM_PRELIMINARY_REVIEW_DAILY_TIME` 必须为 `HH:MM`。启用前应确认 `DEEPSEEK_API_KEY` 有效；生产任务会以 DeepSeek V4 非思考模式请求 JSON Output，并为偶发的空内容或截断 JSON 自动重试最多 3 次。任务会向 DeepSeek 发送用户填写的 `note`，减重挑战月初记录还会发送身高，月末记录会发送月初审核摘要。不会发送凭证图片、用户 ID、赛季 ID、挑战等级 ID 或其他等级规则。
+`LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS` 必须大于 `0`，默认每 15 分钟扫描一次；`LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS` 默认 `300`，仅审核上传满 5 分钟的待审凭证，为用户重传留出窗口。启用前应确认 `DEEPSEEK_API_KEY` 有效；生产任务会以 DeepSeek V4 非思考模式请求 JSON Output，并为偶发的空内容或截断 JSON 自动重试最多 3 次。任务会向 DeepSeek 发送用户填写的 `note`，减重挑战月初记录还会发送身高，月末记录会发送月初审核摘要。不会发送凭证图片、用户 ID、赛季 ID、挑战等级 ID 或其他等级规则。
 
 随后仅运行该评测文件（用命令临时启用，避免把开关长期留在 `.env` 中）：
 
@@ -113,12 +129,15 @@ uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 
 应用启动时会：
 
-1. 创建本地资源目录。
-2. 启动认证缓存过期清理任务。
-3. 配置钉钉凭证时，启动应用 access token 定时预热任务。
-4. 启动排行榜快照刷新任务。
-5. 按配置启动每日文本初审任务。
-6. 注册所有路由。
+1. 为当前数据库创建缺失的数据表（不会修改已有表结构）。
+2. 创建本地资源目录。
+3. 启动认证缓存过期清理任务。
+4. 在 `APP_MODE=production` 时启动应用 access token 定时预热任务。
+5. 启动排行榜快照刷新任务。
+6. 按配置启动定时文本初审任务。
+7. 注册所有路由。
+
+数据库尚未配置 `status = 1` 的赛季时，应用仍可正常冷启动。排行榜刷新任务会跳过本次刷新并记录信息日志，待后续激活赛季后在下一次调度周期自动开始刷新。
 
 本地资源目录包括：
 
@@ -134,7 +153,7 @@ assets/images/proof_record
 ```text
 LEADERBOARD_REFRESH_ENABLED=true
 LEADERBOARD_REFRESH_ON_STARTUP=true
-LEADERBOARD_REFRESH_INTERVAL_SECONDS=86400
+LEADERBOARD_REFRESH_INTERVAL_SECONDS=900
 ```
 
-本地调试时可以将 `LEADERBOARD_REFRESH_INTERVAL_SECONDS` 改小，例如 `60`。
+默认每 15 分钟刷新一次；本地调试时可以将 `LEADERBOARD_REFRESH_INTERVAL_SECONDS` 改小，例如 `60`。

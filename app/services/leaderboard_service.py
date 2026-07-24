@@ -12,14 +12,12 @@ class LeaderboardService:
     async def refresh_current_season_snapshot(
         self,
         session: AsyncSession,
-    ) -> dict[str, str]:
-        """刷新当前赛季排行榜快照。"""
+    ) -> dict[str, str] | None:
+        """刷新当前赛季排行榜快照；无激活赛季时跳过。"""
         season = await season_repository.get_current(session=session)
         if season is None or season.id is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="当前没有激活的赛季",
-            )
+            # 冷启动或赛季切换空窗期没有可刷新的快照，不应导致后台任务报错。
+            return None
 
         CurrentSeasonRuntime.set(
             season_id=season.id,
