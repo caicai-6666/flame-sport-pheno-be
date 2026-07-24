@@ -48,6 +48,14 @@ LIMIT 1
 
 接口会在当前进程内缓存当前赛季 ID 和要求锁定项目数量。
 
+确认当前赛季后，服务会确保 `assets/images/proof_record/{season_id}` 目录存在，为后续凭证上传预先准备本地存储位置。
+
+错误响应：
+
+| 状态码 | 场景 | detail |
+| --- | --- | --- |
+| 404 | 当前没有激活赛季 | `当前没有激活的赛季` |
+
 ## GET /flame/api/season/participate_check
 
 请求示例：
@@ -72,7 +80,7 @@ season_user 存在
 season_user.level_id IS NOT NULL
 ```
 
-如果用户尚未正式参与，接口会继续判断是否超过允许参与天数。允许参与天数由配置项 `SEASON_PARTICIPATION_ALLOWED_DAYS` 控制。
+如果用户尚未正式参与，接口会继续判断是否超过允许参与天数。允许参与天数由配置项 `SEASON_PARTICIPATION_ALLOWED_DAYS` 控制：激活赛季的开始日尚未到达时允许抢先参与；从开始日当天起，开始后第 `N` 天（含）允许参与，第 `N + 1` 天起返回 `403`，默认 `N = 7`。
 
 错误响应：
 

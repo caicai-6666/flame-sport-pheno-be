@@ -2,7 +2,7 @@
 
 ## 审核状态
 
-`proof_record.review_status` 使用单一字段记录两个阶段的审核结果：赛季内每日初审，以及赛季结束后的统一终审。
+`proof_record.review_status` 使用单一字段记录两个阶段的审核结果：赛季内定时初审，以及赛季结束后的统一终审。
 
 ```text
 pending
@@ -22,7 +22,7 @@ rejected
 | `approved` | 终审通过；保留其已初审通过的排行榜资格 |
 | `rejected` | 终审失败；保留其已初审通过的排行榜资格 |
 
-上传接口只创建或重置为 `pending`。每日文本初审任务会根据用户 `note` 与其已选挑战等级对应的一条 `project_rule`，更新为 `preliminary_approved` 或 `preliminary_rejected`；凭证图片保留给赛后人工终审，不发送给模型。
+上传接口只创建或重置为 `pending`。定时文本初审任务会根据用户 `note` 与其已选挑战等级对应的一条 `project_rule`，更新为 `preliminary_approved` 或 `preliminary_rejected`；凭证图片保留给赛后人工终审，不发送给模型。
 
 状态流转：
 
@@ -32,7 +32,7 @@ pending -> preliminary_rejected -> 用户当天重新上传 -> pending
 preliminary_approved -> 用户当天重新上传 -> pending
 ```
 
-### 每日文本初审任务
+### 定时文本初审任务
 
 任务只读取 `CurrentSeasonRuntime.season_id` 对应赛季的有效待审凭证，不扫描过往赛季：
 
@@ -41,12 +41,14 @@ proof_record.season_user_id -> season_user.id
 season_user.season_id = CurrentSeasonRuntime.season_id
 proof_record.status = 1
 proof_record.review_status = pending
-proof_record.created_at < 审核当日 00:00:00
+proof_record.created_at <= 本轮扫描时间 - LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS
 ```
 
 `season_user.level_id` 与 `proof_record.project_id` 共同定位唯一的启用 `project_rule`。等级 ID、赛季 ID、用户 ID、图片路径和项目其他等级规则都不会发送给模型。模型仅接收项目名称、凭证类型、该条规则、规则备注和用户 `note`；减重挑战的月初记录额外发送用户身高，月末记录额外发送同赛季最早通过月初记录的审核意见。
 
 模型返回 `reviewComment`、`reviewStatus` 和 `progressDelta`。普通项目通过时在同一事务内累加 `season_user_project.completion_progress` 并封顶到 `1`；减重挑战月初通过时进度保持 `0`，月末通过时直接设为 `1`。模型异常、超时或返回非法 JSON 时保持 `pending`，下次任务会补审。用户在模型调用期间重传凭证时，旧结果不会覆盖新内容。
+
+同日重传的审核口径是“先撤销旧版本，再按新版本重算”：上传时若该项目当天已有初审通过记录，系统会锁定 `season_user_project` 行、扣回旧记录的 `preliminary_progress_delta`，并将不同上传配置下的旧通过记录软失效；同上传配置则原地重置为待审。新版本初审通过后，系统再记录其实际进度增量并累计；初审失败不回加旧进度。实际增量会考虑 `completion_progress = 1` 的封顶限制，避免扣回模型原始增量造成进度错误。
 
 `累计次数`、`累计天数`、`达标天数`、`累计距离`和`累计时长`是项目总目标，而非单条凭证的拒绝条件。初审只验证该条 `note` 是否满足规则中的单次门槛；通过后由 `progressDelta` 表示其对累计目标的贡献。审核意见不得以“次数不足”“天数不足”或“累计距离不足”等尚未完成累计目标的原因拒绝单条有效记录。
 
@@ -54,7 +56,7 @@ proof_record.created_at < 审核当日 00:00:00
 
 初审系统提示词内置步数、跑步、健身、公司运动、登山和减重挑战的固定 few-shot，用于解释“累计目标 + 单次门槛”的通用语义。它们不替代运行时从 `project_rule` 查询到的规则；每次请求仍只传入当前用户、当前项目和已选等级对应的唯一 `ruleContent`。
 
-任务按 `LLM_PRELIMINARY_REVIEW_DAILY_TIME` 和 `LLM_PRELIMINARY_REVIEW_TIMEZONE` 执行，默认关闭；本批次有结果写入后立即刷新排行榜快照。
+任务按 `LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS` 固定间隔执行，默认每 15 分钟筛查一次；仅审核已上传至少 `LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS`（默认 5 分钟）的待审凭证，为用户重传留出窗口。本批次有结果写入后立即刷新排行榜快照。
 
 ## 排行榜
 
@@ -86,7 +88,7 @@ GET /flame/api/leaderboard/info
 ```text
 LEADERBOARD_REFRESH_ENABLED = true
 LEADERBOARD_REFRESH_ON_STARTUP = true
-LEADERBOARD_REFRESH_INTERVAL_SECONDS = 86400
+LEADERBOARD_REFRESH_INTERVAL_SECONDS = 900
 ```
 
 刷新策略是全量替换当前赛季快照：
@@ -139,7 +141,7 @@ season_user.final_points
 point_record
 ```
 
-赛季内项目完成进度保存在 `season_user_project.completion_progress`。每日初审通过后会在同一事务中更新该字段；终审和积分结算可将项目进度是否达到 `1` 作为辅助判断依据。
+赛季内项目完成进度保存在 `season_user_project.completion_progress`。定时初审通过后会在同一事务中更新该字段；终审和积分结算可将项目进度是否达到 `1` 作为辅助判断依据。
 
 ## 尚未实现的能力
 

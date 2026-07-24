@@ -1,13 +1,14 @@
 from datetime import datetime
 
-from sqlalchemy import and_, case, update
+from decimal import Decimal
+
+from sqlalchemy import and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.models.project import Project
 from app.models.project_rule import ProjectRule
 from app.models.project_upload_config import (
-    MONTH_END_RECORD_TYPE,
     MONTH_START_RECORD_TYPE,
     ProjectUploadConfig,
 )
@@ -63,17 +64,10 @@ class ProofRecordRepository:
             .where(ProofRecord.status == 1)
             .where(ProofRecord.review_status == ProofReviewStatus.PENDING.value)
             .where(ProofRecord.created_at < cutoff_at)
-            # 同项目同等级同凭证类型连续请求，最大化复用模型的固定规则前缀；
-            # 月初基线必须先处理，保证同批月末记录可读取其审核摘要。
+            # 同一用户项目按上传时间处理，使当天重传的最新凭证最后写入审核结果。
             .order_by(
                 Project.id.asc(),
-                SeasonUser.level_id.asc(),
-                case(
-                    (ProjectUploadConfig.record_type == MONTH_START_RECORD_TYPE, 0),
-                    (ProjectUploadConfig.record_type == MONTH_END_RECORD_TYPE, 1),
-                    else_=2,
-                ).asc(),
-                ProjectUploadConfig.record_type.asc(),
+                SeasonUser.id.asc(),
                 ProofRecord.created_at.asc(),
                 ProofRecord.id.asc(),
             )
@@ -127,10 +121,78 @@ class ProofRecordRepository:
             .values(
                 review_status=review_status.value,
                 review_comment=review_comment,
+                preliminary_progress_delta=Decimal("0.0000"),
             )
         )
         result = await session.execute(statement)
         return bool(result.rowcount)
+
+    async def set_preliminary_progress_delta_if_approved(
+        self,
+        session: AsyncSession,
+        proof_record_id: int,
+        expected_created_at: datetime,
+        expected_note: str | None,
+        preliminary_progress_delta: Decimal,
+    ) -> bool:
+        """记录本条凭证实际增加的进度，供同日重传时精确撤销。"""
+        statement = (
+            update(ProofRecord)
+            .where(ProofRecord.id == proof_record_id)
+            .where(ProofRecord.status == 1)
+            .where(
+                ProofRecord.review_status
+                == ProofReviewStatus.PRELIMINARY_APPROVED.value
+            )
+            .where(ProofRecord.created_at == expected_created_at)
+            .where(ProofRecord.note == expected_note)
+            .values(preliminary_progress_delta=preliminary_progress_delta)
+        )
+        result = await session.execute(statement)
+        return bool(result.rowcount)
+
+    async def list_today_preliminary_approved_records(
+        self,
+        session: AsyncSession,
+        season_user_id: int,
+        project_id: int,
+        day_start: datetime,
+        next_day_start: datetime,
+        excluded_proof_record_id: int | None = None,
+    ) -> list[ProofRecord]:
+        """查询当天同项目仍有效的初审通过记录，供新版本替换时撤销贡献。"""
+        statement = (
+            select(ProofRecord)
+            .where(ProofRecord.season_user_id == season_user_id)
+            .where(ProofRecord.project_id == project_id)
+            .where(ProofRecord.status == 1)
+            .where(
+                ProofRecord.review_status
+                == ProofReviewStatus.PRELIMINARY_APPROVED.value
+            )
+            .where(ProofRecord.created_at >= day_start)
+            .where(ProofRecord.created_at < next_day_start)
+            .order_by(ProofRecord.created_at.asc(), ProofRecord.id.asc())
+        )
+        if excluded_proof_record_id is not None:
+            statement = statement.where(ProofRecord.id != excluded_proof_record_id)
+        result = await session.execute(statement)
+        return list(result.scalars().all())
+
+    async def deactivate_records(
+        self,
+        session: AsyncSession,
+        proof_record_ids: list[int],
+    ) -> None:
+        """软失效被新版本替换的旧凭证，审计数据仍保留在数据库中。"""
+        if not proof_record_ids:
+            return
+        await session.execute(
+            update(ProofRecord)
+            .where(ProofRecord.id.in_(proof_record_ids))
+            .where(ProofRecord.status == 1)
+            .values(status=0),
+        )
 
     async def get_today_record(
         self,

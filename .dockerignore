@@ -1,0 +1,12 @@
+.git
+.idea
+.env
+.venv
+venv
+__pycache__
+*.py[cod]
+tests
+test_*.http
+description
+README.md
+assets

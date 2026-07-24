@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.runtime_env import CurrentSeasonRuntime
+from app.core.storage import ensure_proof_record_season_directory
 from app.repositories.season_repository import season_repository
 from app.repositories.season_user_repository import season_user_repository
 
@@ -19,6 +20,8 @@ class SeasonService:
                 detail="当前没有激活的赛季",
             )
 
+        # 当前赛季确认后提前准备凭证目录，避免首次上传因目录缺失失败。
+        ensure_proof_record_season_directory(season.id or 0)
         await self._load_current_season_runtime_if_needed(
             season_id=season.id or 0,
             required_project_count=season.required_project_count,
@@ -66,7 +69,12 @@ class SeasonService:
 
     def _ensure_participation_period_allowed(self, start_date: date) -> None:
         """校验当前日期是否仍处于允许参与赛季的时间范围内。"""
-        days_since_start = (date.today() - start_date).days
+        today = date.today()
+        # 已被后台提前激活、但尚未到开始日的赛季允许用户抢先参与。
+        if start_date > today:
+            return
+
+        days_since_start = (today - start_date).days
         if days_since_start > settings.SEASON_PARTICIPATION_ALLOWED_DAYS:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

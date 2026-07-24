@@ -42,12 +42,18 @@ def build_proof_record_image_path(
     timestamp: datetime | int | str,
 ) -> Path:
     """按凭证图片整理规则构建本地保存路径。"""
-    season_dir = settings.PROOF_RECORD_IMAGE_DIR / str(season_id)
-    season_dir.mkdir(parents=True, exist_ok=True)
+    season_dir = ensure_proof_record_season_directory(season_id)
     safe_user_id = _normalize_path_part(user_id)
     safe_timestamp = _normalize_proof_record_timestamp(timestamp)
     safe_filename = _normalize_proof_record_filename(filename)
     return season_dir / f"{safe_user_id}-{project_id}-{safe_timestamp}-{safe_filename}.jpg"
+
+
+def ensure_proof_record_season_directory(season_id: int) -> Path:
+    """确保指定赛季的凭证目录存在，并返回该目录。"""
+    season_dir = settings.PROOF_RECORD_IMAGE_DIR / str(season_id)
+    season_dir.mkdir(parents=True, exist_ok=True)
+    return season_dir
 
 
 def save_avatar_image(

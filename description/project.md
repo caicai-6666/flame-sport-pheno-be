@@ -51,7 +51,7 @@
 - 用户资料完整度检查和身高更新。
 - 当前赛季查询、参与状态和报名期限检查。
 - 运动项目、挑战规则、项目锁定、挑战等级锁定和已锁定项目完成进度查询。
-- 项目上传配置、JPG 凭证上传、当天重复上传和历史记录查询；每日文本初审会写入初审结论和审核意见。
+- 项目上传配置、JPG 凭证上传、当天重复上传和历史记录查询；定时文本初审会写入初审结论和审核意见，重传会先撤销旧版本进度再按新版本重算。
 - 当前赛季初审通过凭证的排行榜快照定时刷新和查询；减重挑战月末通过只计入一次。
 - 商品查询、积分流水查询和积分兑换。
 - 头像、项目图标、商品图片和凭证图片的本地文件管理。
@@ -149,6 +149,7 @@ API 契约 -> Router -> Service -> Repository -> Model/DB 文档 -> 业务规则
 
 - [`local_run.md`](dev/local_run.md)
 - [`mysql_docker.md`](dev/mysql_docker.md)
+- [`docker_compose.md`](dev/docker_compose.md)
 - [`assets.md`](dev/assets.md)
 - [`mock_data.md`](dev/mock_data.md)
 - [`documentation.md`](dev/documentation.md)

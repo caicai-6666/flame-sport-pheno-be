@@ -10,16 +10,18 @@ logger = logging.getLogger(__name__)
 _refresh_task: asyncio.Task[None] | None = None
 
 
-async def _refresh_once() -> None:
+async def _refresh_once() -> dict[str, str] | None:
     """执行一次排行榜快照刷新。"""
     async with async_session_factory() as session:
-        await leaderboard_service.refresh_current_season_snapshot(session=session)
+        return await leaderboard_service.refresh_current_season_snapshot(session=session)
 
 
 async def _refresh_once_safely() -> None:
     """安全执行排行榜刷新，失败时记录日志并保持后台循环存活。"""
     try:
-        await _refresh_once()
+        result = await _refresh_once()
+        if result is None:
+            logger.info("leaderboard snapshot refresh skipped: no active season")
     except Exception:
         logger.exception("leaderboard snapshot refresh failed")
 

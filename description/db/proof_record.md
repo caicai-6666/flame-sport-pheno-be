@@ -26,6 +26,7 @@
 | note           | VARCHAR(255)     |       否 |        NULL | 用户备注                               |
 | review_status  | VARCHAR(32)      |       是 |     pending | 初审与终审状态                         |
 | review_comment | VARCHAR(500)     |       否 |        NULL | 审核评论，用于后台人员填写审核说明     |
+| preliminary_progress_delta | DECIMAL(5,4) | 是 | 0.0000 | 当前版本初审通过实际增加的项目进度 |
 | status         | TINYINT UNSIGNED |       是 |           1 | 记录状态：`1` 正常，`0` 无效/删除      |
 | created_at     | DATETIME         |       是 | CURRENT_TIMESTAMP | 上传时间                         |
 
@@ -182,12 +183,22 @@ rejected             = 终审失败
 pending
 ```
 
-未来每日初审任务根据图片、`note` 和项目等级规则更新为：
+定时初审任务根据图片、`note` 和项目等级规则更新为：
 ```text
 preliminary_approved
 preliminary_rejected
 ```
 初审通过的凭证计入排行榜；初审失败的凭证不计入，用户可重传后重新初审。赛季结束后再统一更新为 `approved` 或 `rejected`，用于最终审核和积分结算。
+---
+
+### preliminary_progress_delta
+
+当前版本的凭证初审通过后，实际推进 `season_user_project.completion_progress` 的数值。
+
+该值不是模型返回的原始 `progressDelta`：当项目进度已经接近 `1` 时，系统只保存本次真正增加的剩余部分。例如进度从 `0.9000` 审核通过一个模型建议增加 `0.2000` 的凭证时，最终进度只能到 `1.0000`，本字段保存 `0.1000`。
+
+同日重传会先扣回这条旧版本凭证保存的实际增量，再重置凭证为待初审；新版本通过后再保存并累计新的实际增量。这样既不会在封顶场景扣多，也不会因重复上传重复累计进度。
+
 ---
 
 ### review_comment
@@ -253,6 +264,7 @@ CREATE TABLE proof_record (
   note VARCHAR(255) DEFAULT NULL COMMENT '用户备注',
   review_status VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT '审核状态：pending待初审，preliminary_approved初审通过，preliminary_rejected初审失败，approved终审通过，rejected终审失败',
   review_comment VARCHAR(500) DEFAULT NULL COMMENT '审核评论，用于后台人员填写审核说明',
+  preliminary_progress_delta DECIMAL(5,4) NOT NULL DEFAULT 0.0000 COMMENT '当前版本初审通过实际增加的项目进度',
   status TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '状态：1正常，0无效/删除',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
   PRIMARY KEY (id),

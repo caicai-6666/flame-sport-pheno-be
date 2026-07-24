@@ -43,7 +43,7 @@ project_upload_config.status = 1
 凭证图片保存到：
 
 ```text
-assets/api/images/api/proof_record/{season_id}
+assets/images/proof_record/{season_id}
 ```
 
 文件名规则：
@@ -53,6 +53,8 @@ assets/api/images/api/proof_record/{season_id}
 ```
 
 数据库 `proof_record.image_url` 当前只保存完整文件名。
+
+读取到激活赛季时，服务会预先创建该赛季 ID 对应的凭证目录；上传时也会再次确保目录存在，避免目录被手动清理后造成写入失败。
 
 ## 写库规则
 
@@ -91,6 +93,8 @@ review_comment = NULL
 ```
 
 当天重传视为一条新的待初审内容：即使旧凭证已经初审通过，也会覆盖旧图片和备注，并清除旧审核意见。这样未来的初审任务只会依据最新的图片和 `note` 判断，不会误用旧结论。
+
+重传前如存在当天同项目的初审通过记录，上传事务会先撤销旧版本对项目进度的实际贡献，再将重传内容置为 `pending`。后续定时初审通过时，系统才按新版本的实际贡献重新累计；初审失败则保持扣除后的进度。不同上传配置形成的当天同项目旧通过记录也会被软失效，确保新版本成为唯一有效通过记录。
 
 ## 事务和文件清理
 
