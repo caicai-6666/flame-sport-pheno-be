@@ -1,7 +1,8 @@
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 
-from sqlalchemy import Column, DateTime, text
+from sqlalchemy import Column, DateTime, Numeric, text
 from sqlmodel import Field, SQLModel
 
 
@@ -39,6 +40,17 @@ class ProofRecord(SQLModel, table=True):
         max_length=32,
     )
     review_comment: str | None = Field(default=None, max_length=500)
+    # 保存本条凭证实际推进的进度，重传时才能精确撤销旧版本的贡献。
+    preliminary_progress_delta: Decimal = Field(
+        default=Decimal("0.0000"),
+        ge=Decimal("0"),
+        le=Decimal("1"),
+        sa_column=Column(
+            Numeric(5, 4),
+            nullable=False,
+            server_default=text("0.0000"),
+        ),
+    )
     status: int = Field(default=1)
     created_at: datetime = Field(
         default_factory=datetime.now,

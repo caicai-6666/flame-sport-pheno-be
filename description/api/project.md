@@ -138,7 +138,7 @@ Authorization: auth_code
 ]
 ```
 
-仅返回当前用户在指定赛季已锁定且有效的项目。`completion_progress` 为 `0`～`1` 的数值；新锁定项目初始值为 `0`，后续每日初审通过后累积更新。
+仅返回当前用户在指定赛季已锁定且有效的项目。`completion_progress` 为 `0`～`1` 的数值；新锁定项目初始值为 `0`，后续定时初审通过后累积更新。
 
 ## POST /flame/api/project/lock
 

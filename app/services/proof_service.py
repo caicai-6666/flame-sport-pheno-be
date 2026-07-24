@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from time import monotonic
 
@@ -10,6 +11,7 @@ from app.core.runtime_env import CurrentSeasonRuntime
 from app.core.storage import build_proof_record_image_path
 from app.models.project_upload_config import ProjectUploadConfig
 from app.models.proof_record import ProofReviewStatus
+from app.models.season_user_project import SeasonUserProject
 from app.repositories.project_repository import project_repository
 from app.repositories.proof_record_repository import proof_record_repository
 from app.repositories.season_repository import season_repository
@@ -17,6 +19,7 @@ from app.repositories.season_user_repository import season_user_repository
 
 
 UPLOAD_CONFIG_CACHE_TTL_SECONDS = 300
+PROGRESS_PRECISION = Decimal("0.0001")
 
 
 class ProofService:
@@ -146,6 +149,16 @@ class ProofService:
                     status_code=status.HTTP_409_CONFLICT,
                     detail="用户尚未正式参与该赛季",
                 )
+            locked_project = await season_user_repository.lock_active_project(
+                session=session,
+                season_user_id=season_user.id,
+                project_id=project_id,
+            )
+            if locked_project is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="用户未锁定该项目",
+                )
 
             # 保存文件后写数据库；如果数据库失败，会删除本次新文件避免残留。
             image_path.write_bytes(image_bytes)
@@ -159,6 +172,7 @@ class ProofService:
                 note=normalized_note,
                 uploaded_at=uploaded_at,
                 season_id=season_id,
+                project_lock=locked_project,
             )
             await session.commit()
         except HTTPException:
@@ -263,6 +277,7 @@ class ProofService:
         note: str | None,
         uploaded_at: datetime,
         season_id: int,
+        project_lock: SeasonUserProject,
     ) -> Path | None:
         """创建或更新当天同项目同上传配置的凭证记录。"""
         day_start = uploaded_at.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -275,6 +290,37 @@ class ProofService:
             day_start=day_start,
             next_day_start=next_day_start,
         )
+        replaced_records = (
+            await proof_record_repository.list_today_preliminary_approved_records(
+                session=session,
+                season_user_id=season_user_id,
+                project_id=project_id,
+                day_start=day_start,
+                next_day_start=next_day_start,
+            )
+        )
+        if replaced_records:
+            # 重传先撤销当天旧版本实际贡献；进度曾被封顶时只能扣回实际增加量，
+            # 不能直接使用模型原始 progressDelta。
+            self._reverse_project_progress(
+                project_lock=project_lock,
+                progress_delta=sum(
+                    (
+                        replaced_record.preliminary_progress_delta
+                        for replaced_record in replaced_records
+                    ),
+                    Decimal("0.0000"),
+                ),
+            )
+            await proof_record_repository.deactivate_records(
+                session=session,
+                proof_record_ids=[
+                    replaced_record.id
+                    for replaced_record in replaced_records
+                    if replaced_record.id is not None
+                    and replaced_record.id != (proof_record.id if proof_record else None)
+                ],
+            )
         if proof_record is None:
             await proof_record_repository.create(
                 session=session,
@@ -297,9 +343,23 @@ class ProofService:
         proof_record.note = note
         proof_record.review_status = ProofReviewStatus.PENDING.value
         proof_record.review_comment = None
+        proof_record.preliminary_progress_delta = Decimal("0.0000")
         proof_record.created_at = uploaded_at
         await session.flush()
         return old_image_path
+
+    def _reverse_project_progress(
+        self,
+        project_lock: SeasonUserProject,
+        progress_delta: Decimal,
+    ) -> None:
+        """撤销被重传凭证替换的旧版本实际进度。"""
+        project_lock.completion_progress = max(
+            Decimal("0.0000"),
+            (
+                project_lock.completion_progress - progress_delta
+            ).quantize(PROGRESS_PRECISION, rounding=ROUND_HALF_UP),
+        )
 
     def _build_upload_config_item(
         self,

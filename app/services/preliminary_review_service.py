@@ -3,7 +3,7 @@
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -149,6 +149,18 @@ class PreliminaryReviewService:
         if proof_record.id is None or season_user.id is None:
             raise RuntimeError("待初审凭证缺少主键关联")
 
+        project_lock: SeasonUserProject | None = None
+        if review_result.review_status == ProofReviewStatus.PRELIMINARY_APPROVED:
+            # 同一赛季项目的通过结果必须串行写入：这样多实例同时初审时，后一条
+            # 通过凭证仍会可靠地替换当天旧记录，而不会把进度重复累计。
+            project_lock = await season_user_repository.lock_active_project(
+                session=session,
+                season_user_id=season_user.id,
+                project_id=proof_record.project_id,
+            )
+            if project_lock is None:
+                raise RuntimeError("初审凭证关联的赛季项目不存在或已失效")
+
         # 条件更新同时校验创建时间和 note，用户重传后不会被旧模型结果覆盖。
         updated = await proof_record_repository.update_preliminary_result_if_pending(
             session=session,
@@ -169,13 +181,61 @@ class PreliminaryReviewService:
             return False
 
         if review_result.review_status == ProofReviewStatus.PRELIMINARY_APPROVED:
-            await self._apply_project_progress(
+            if project_lock is None:
+                raise RuntimeError("初审凭证缺少项目锁")
+            day_start = proof_record.created_at.replace(
+                hour=0, minute=0, second=0, microsecond=0,
+            )
+            replaced_records = (
+                await proof_record_repository.list_today_preliminary_approved_records(
+                    session=session,
+                    season_user_id=season_user.id,
+                    project_id=proof_record.project_id,
+                    day_start=day_start,
+                    next_day_start=day_start + timedelta(days=1),
+                    excluded_proof_record_id=proof_record.id,
+                )
+            )
+            if replaced_records:
+                # 兼容旧数据中同项目当天已存在通过记录的情况：先撤销旧版本实际
+                # 增加的进度，再以当前凭证的审核结果重新计算。
+                await proof_record_repository.deactivate_records(
+                    session=session,
+                    proof_record_ids=[
+                        old_proof_record.id
+                        for old_proof_record in replaced_records
+                        if old_proof_record.id is not None
+                    ],
+                )
+                self._reverse_project_progress(
+                    project_lock=project_lock,
+                    progress_delta=sum(
+                        (
+                            old_proof_record.preliminary_progress_delta
+                            for old_proof_record in replaced_records
+                        ),
+                        Decimal("0.0000"),
+                    ),
+                )
+            applied_progress_delta = await self._apply_project_progress(
                 session=session,
                 season_user_id=season_user.id,
                 project_id=proof_record.project_id,
                 record_type=upload_config.record_type,
                 progress_delta=review_result.progress_delta,
+                project_lock=project_lock,
             )
+            stored_progress_delta = (
+                await proof_record_repository.set_preliminary_progress_delta_if_approved(
+                    session=session,
+                    proof_record_id=proof_record.id,
+                    expected_created_at=proof_record.created_at,
+                    expected_note=proof_record.note,
+                    preliminary_progress_delta=applied_progress_delta,
+                )
+            )
+            if not stored_progress_delta:
+                raise RuntimeError("初审凭证进度增量写入失败")
 
         await session.commit()
         return True
@@ -187,31 +247,51 @@ class PreliminaryReviewService:
         project_id: int,
         record_type: str,
         progress_delta: Decimal,
-    ) -> None:
-        project_lock = await season_user_repository.lock_active_project(
-            session=session,
-            season_user_id=season_user_id,
-            project_id=project_id,
-        )
+        project_lock: SeasonUserProject | None = None,
+    ) -> Decimal:
+        if project_lock is None:
+            project_lock = await season_user_repository.lock_active_project(
+                session=session,
+                season_user_id=season_user_id,
+                project_id=project_id,
+            )
         if project_lock is None:
             raise RuntimeError("初审凭证关联的赛季项目不存在或已失效")
 
         if record_type == MONTH_START_RECORD_TYPE:
             # 月初只建立 BMI 基线，绝不推进减重项目进度。
-            return
+            return Decimal("0.0000")
         if record_type == MONTH_END_RECORD_TYPE:
             # 月末达标代表本赛季减重挑战完成，不按增量叠加。
+            applied_progress_delta = (
+                Decimal("1.0000") - project_lock.completion_progress
+            ).quantize(PROGRESS_PRECISION, rounding=ROUND_HALF_UP)
             project_lock.completion_progress = Decimal("1.0000")
             await session.flush()
-            return
+            return applied_progress_delta
 
+        previous_progress = project_lock.completion_progress
         project_lock.completion_progress = min(
             Decimal("1.0000"),
             (
-                project_lock.completion_progress + progress_delta
+                previous_progress + progress_delta
             ).quantize(PROGRESS_PRECISION, rounding=ROUND_HALF_UP),
         )
         await session.flush()
+        return project_lock.completion_progress - previous_progress
+
+    def _reverse_project_progress(
+        self,
+        project_lock: SeasonUserProject,
+        progress_delta: Decimal,
+    ) -> None:
+        """撤销被当天新凭证覆盖的旧版本实际进度，避免封顶场景扣多。"""
+        project_lock.completion_progress = max(
+            Decimal("0.0000"),
+            (
+                project_lock.completion_progress - progress_delta
+            ).quantize(PROGRESS_PRECISION, rounding=ROUND_HALF_UP),
+        )
 
     def _parse_rule_content(self, rule: ProjectRule) -> list[dict[str, str]]:
         """兼容 MySQL JSON 和历史字符串值，确保模型收到唯一规则的标准结构。"""

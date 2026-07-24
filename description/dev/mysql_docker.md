@@ -48,7 +48,24 @@ Compose 部署时，后端会使用 Docker 网络中的 `mysql:3306`；宿主机
 
 ## 既有数据库字段迁移
 
-`SQLModel.metadata.create_all()` 不会为已有表补充字段。为记录正式报名时间，需要对已存在数据库执行一次：
+`SQLModel.metadata.create_all()` 不会为已有表补充字段。对已存在数据库，需要按已部署版本执行相应迁移。
+
+### 凭证重传实际进度增量
+
+部署“重传先撤销旧版本进度”后，执行仓库中的
+[`20260724_add_proof_record_preliminary_progress_delta.sql`](../../scripts/migrations/20260724_add_proof_record_preliminary_progress_delta.sql)：
+
+```bash
+docker compose exec -T mysql sh -c \
+  'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' \
+  < flame-sport-pheno-be/scripts/migrations/20260724_add_proof_record_preliminary_progress_delta.sql
+```
+
+该字段只能自动记录迁移后新初审通过凭证的实际进度增量。迁移前已经通过的记录无法仅凭现有数据可靠反推其实际增量；若它们仍可能被重传，应在启用功能前重新核算当前赛季项目进度。
+
+### 正式报名时间
+
+为记录正式报名时间，需要对已存在数据库执行一次：
 
 ```sql
 ALTER TABLE season_user
