@@ -95,7 +95,7 @@ LEADERBOARD_REFRESH_INTERVAL_SECONDS = 900
 
 1. 查询当前激活赛季。
 2. 删除当前赛季所有旧的 `leaderboard_snapshot` 记录。
-3. 统计当前赛季正式参与用户在赛季开始后、本次刷新时刻前的有效凭证数量。
+3. 统计当前赛季正式参与用户在本次刷新时刻前的有效凭证数量。
 4. 将统计结果重新写入 `leaderboard_snapshot`。
 
 统计参与用户条件：
@@ -112,9 +112,10 @@ season_user.status >= season.required_project_count
 proof_record.season_user_id = season_user.id
 proof_record.status = 1
 proof_record.review_status IN (preliminary_approved, approved, rejected)
-proof_record.created_at >= season.start_date 00:00:00
 proof_record.created_at < 本次刷新时刻
 ```
+
+凭证通过 `season_user_id` 已经归属到唯一赛季，因此排行榜不再以 `season.start_date` 作为上传时间下限；赛季开始前的抢先体验凭证初审通过后同样计入当前赛季排行榜。
 
 减重挑战还适用：
 

@@ -21,7 +21,6 @@ class LeaderboardRepository:
         session: AsyncSession,
         season_id: int,
         required_project_count: int,
-        season_start_at: datetime,
         cutoff_at: datetime,
     ) -> None:
         """全量替换当前赛季排行榜快照。"""
@@ -69,7 +68,6 @@ class LeaderboardRepository:
                   ON proof_record.season_user_id = season_user.id
                   AND proof_record.status = 1
                   AND proof_record.review_status IN :eligible_review_statuses
-                  AND proof_record.created_at >= :season_start_at
                   AND proof_record.created_at < :cutoff_at
                 LEFT JOIN project_upload_config
                   ON project_upload_config.id = proof_record.project_upload_config_id
@@ -84,7 +82,6 @@ class LeaderboardRepository:
             {
                 "season_id": season_id,
                 "required_project_count": required_project_count,
-                "season_start_at": season_start_at,
                 "cutoff_at": cutoff_at,
                 "eligible_review_statuses": tuple(
                     review_status.value

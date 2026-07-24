@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,12 +25,10 @@ class LeaderboardService:
         )
         # 定时任务间隔可配置，因此统计截止到本次刷新时刻，便于短间隔刷新及时反映新凭证。
         cutoff_at = datetime.now()
-        season_start_at = datetime.combine(season.start_date, time.min)
         await leaderboard_repository.replace_current_season_snapshot(
             session=session,
             season_id=season.id,
             required_project_count=season.required_project_count,
-            season_start_at=season_start_at,
             cutoff_at=cutoff_at,
         )
         await session.commit()
