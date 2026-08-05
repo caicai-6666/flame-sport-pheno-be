@@ -80,7 +80,7 @@ router -> service -> repository -> model
 | `app/repositories/` | SQL 查询、关联查询、行锁、写入和 `flush` |
 | `app/models/` | SQLModel 数据表映射 |
 | `app/core/` | 配置、数据库、认证、缓存、运行时状态、文件存储和后台任务 |
-| `main.py` | FastAPI 应用创建、路由注册和应用生命周期 |
+| `../app/main.py` | FastAPI 应用创建、路由注册和应用生命周期 |
 
 实现时应保持以下边界：
 

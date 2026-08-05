@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,10 +27,10 @@ from app.models.user import User
 from app.models.project import Project
 from app.repositories.proof_record_repository import proof_record_repository
 from app.repositories.season_user_repository import season_user_repository
+from app.services.project_progress_service import project_progress_service
 
 
 logger = logging.getLogger(__name__)
-PROGRESS_PRECISION = Decimal("0.0001")
 
 
 @dataclass
@@ -150,7 +150,12 @@ class PreliminaryReviewService:
             raise RuntimeError("待初审凭证缺少主键关联")
 
         project_lock: SeasonUserProject | None = None
+        normalized_progress_delta = Decimal("0.0000")
         if review_result.review_status == ProofReviewStatus.PRELIMINARY_APPROVED:
+            normalized_progress_delta = project_progress_service.normalize_progress_delta(
+                record_type=upload_config.record_type,
+                progress_delta=review_result.progress_delta,
+            )
             # 同一赛季项目的通过结果必须串行写入：这样多实例同时初审时，后一条
             # 通过凭证仍会可靠地替换当天旧记录，而不会把进度重复累计。
             project_lock = await season_user_repository.lock_active_project(
@@ -169,6 +174,7 @@ class PreliminaryReviewService:
             expected_note=proof_record.note,
             review_status=review_result.review_status,
             review_comment=review_result.review_comment,
+            progress_delta=normalized_progress_delta,
         )
         if not updated:
             proof_record_id = proof_record.id
@@ -197,101 +203,54 @@ class PreliminaryReviewService:
                 )
             )
             if replaced_records:
-                # 兼容旧数据中同项目当天已存在通过记录的情况：先撤销旧版本实际
-                # 增加的进度，再以当前凭证的审核结果重新计算。
+                # 同项目当天只保留最新版本；旧版本释放的实际贡献优先回补给
+                # 更早上传且因封顶未完全分配进度的有效凭证。
+                replaced_record_ids = [
+                    old_proof_record.id
+                    for old_proof_record in replaced_records
+                    if old_proof_record.id is not None
+                ]
+                released_increase = sum(
+                    (
+                        old_proof_record.increase
+                        for old_proof_record in replaced_records
+                    ),
+                    Decimal("0.0000"),
+                )
                 await proof_record_repository.deactivate_records(
                     session=session,
-                    proof_record_ids=[
-                        old_proof_record.id
-                        for old_proof_record in replaced_records
-                        if old_proof_record.id is not None
+                    proof_record_ids=replaced_record_ids,
+                )
+                await project_progress_service.release_and_redistribute(
+                    session=session,
+                    project_lock=project_lock,
+                    season_user_id=season_user.id,
+                    project_id=proof_record.project_id,
+                    released_increase=released_increase,
+                    excluded_proof_record_ids=[
+                        *replaced_record_ids,
+                        proof_record.id,
                     ],
                 )
-                self._reverse_project_progress(
-                    project_lock=project_lock,
-                    progress_delta=sum(
-                        (
-                            old_proof_record.preliminary_progress_delta
-                            for old_proof_record in replaced_records
-                        ),
-                        Decimal("0.0000"),
-                    ),
-                )
-            applied_progress_delta = await self._apply_project_progress(
-                session=session,
-                season_user_id=season_user.id,
-                project_id=proof_record.project_id,
-                record_type=upload_config.record_type,
-                progress_delta=review_result.progress_delta,
+            applied_increase = project_progress_service.allocate_progress(
                 project_lock=project_lock,
+                progress_delta=normalized_progress_delta,
             )
-            stored_progress_delta = (
-                await proof_record_repository.set_preliminary_progress_delta_if_approved(
+            await session.flush()
+            stored_increase = (
+                await proof_record_repository.set_increase_if_preliminary_approved(
                     session=session,
                     proof_record_id=proof_record.id,
                     expected_created_at=proof_record.created_at,
                     expected_note=proof_record.note,
-                    preliminary_progress_delta=applied_progress_delta,
+                    increase=applied_increase,
                 )
             )
-            if not stored_progress_delta:
-                raise RuntimeError("初审凭证进度增量写入失败")
+            if not stored_increase:
+                raise RuntimeError("初审凭证实际进度贡献写入失败")
 
         await session.commit()
         return True
-
-    async def _apply_project_progress(
-        self,
-        session: AsyncSession,
-        season_user_id: int,
-        project_id: int,
-        record_type: str,
-        progress_delta: Decimal,
-        project_lock: SeasonUserProject | None = None,
-    ) -> Decimal:
-        if project_lock is None:
-            project_lock = await season_user_repository.lock_active_project(
-                session=session,
-                season_user_id=season_user_id,
-                project_id=project_id,
-            )
-        if project_lock is None:
-            raise RuntimeError("初审凭证关联的赛季项目不存在或已失效")
-
-        if record_type == MONTH_START_RECORD_TYPE:
-            # 月初只建立 BMI 基线，绝不推进减重项目进度。
-            return Decimal("0.0000")
-        if record_type == MONTH_END_RECORD_TYPE:
-            # 月末达标代表本赛季减重挑战完成，不按增量叠加。
-            applied_progress_delta = (
-                Decimal("1.0000") - project_lock.completion_progress
-            ).quantize(PROGRESS_PRECISION, rounding=ROUND_HALF_UP)
-            project_lock.completion_progress = Decimal("1.0000")
-            await session.flush()
-            return applied_progress_delta
-
-        previous_progress = project_lock.completion_progress
-        project_lock.completion_progress = min(
-            Decimal("1.0000"),
-            (
-                previous_progress + progress_delta
-            ).quantize(PROGRESS_PRECISION, rounding=ROUND_HALF_UP),
-        )
-        await session.flush()
-        return project_lock.completion_progress - previous_progress
-
-    def _reverse_project_progress(
-        self,
-        project_lock: SeasonUserProject,
-        progress_delta: Decimal,
-    ) -> None:
-        """撤销被当天新凭证覆盖的旧版本实际进度，避免封顶场景扣多。"""
-        project_lock.completion_progress = max(
-            Decimal("0.0000"),
-            (
-                project_lock.completion_progress - progress_delta
-            ).quantize(PROGRESS_PRECISION, rounding=ROUND_HALF_UP),
-        )
 
     def _parse_rule_content(self, rule: ProjectRule) -> list[dict[str, str]]:
         """兼容 MySQL JSON 和历史字符串值，确保模型收到唯一规则的标准结构。"""

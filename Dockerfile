@@ -27,7 +27,7 @@ RUN pip install --no-index --find-links=/wheels /wheels/* \
     && rm -rf /wheels
 
 COPY app ./app
-COPY main.py ./
+COPY app/main.py ./
 
 EXPOSE 8000
 

@@ -1,12 +1,9 @@
-import base64
 import json
 from datetime import datetime
-from pathlib import Path
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.runtime_env import CurrentSeasonRuntime
 from app.models.project import Project
 from app.models.project_rule import ProjectRule
@@ -20,7 +17,7 @@ class ProjectService:
         self,
         session: AsyncSession,
     ) -> list[dict[str, int | str]]:
-        """查询可见项目，并将项目图标转换为 base64 字符串。"""
+        """查询可见项目，并返回项目图标相对地址。"""
         projects = await project_repository.list_visible(session=session)
         return [self._build_project_item(project) for project in projects]
 
@@ -265,45 +262,9 @@ class ProjectService:
             "project_id": project.id or 0,
             "name": project.name,
             "description": project.description or "",
-            "image": self._read_project_icon_as_base64(project),
+            # 图标文件通过图片接口按需读取，避免项目列表重复传输 Base64 内容。
+            "image": project.icon_url or "",
         }
-
-    def _read_project_icon_as_base64(self, project: Project) -> str:
-        """读取项目图标文件并转换为 base64 字符串。"""
-        if not project.icon_url:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"项目 {project.name} 未配置图标",
-            )
-
-        icon_path = self._resolve_project_icon_path(project.icon_url)
-        if not icon_path.is_file():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"项目 {project.name} 的图标文件不存在",
-            )
-
-        return base64.b64encode(icon_path.read_bytes()).decode("utf-8")
-
-    def _resolve_project_icon_path(self, icon_url: str) -> Path:
-        """将数据库中的 icon_url 转换为本地项目图标路径。"""
-        icon_relative_path = Path(icon_url.strip().lstrip("/\\"))
-        if icon_relative_path.parts and icon_relative_path.parts[0] == "project_icon":
-            icon_relative_path = Path(*icon_relative_path.parts[1:])
-
-        icon_path = settings.PROJECT_ICON_IMAGE_DIR / icon_relative_path
-        self._ensure_project_icon_path_safe(icon_path)
-        return icon_path
-
-    def _ensure_project_icon_path_safe(self, icon_path: Path) -> None:
-        """确保项目图标路径没有逃逸出项目图标目录。"""
-        icon_base_dir = settings.PROJECT_ICON_IMAGE_DIR.resolve()
-        resolved_icon_path = icon_path.resolve()
-        if not resolved_icon_path.is_relative_to(icon_base_dir):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="项目图标路径非法",
-            )
 
     def _parse_rule_content(self, rule: ProjectRule) -> list[dict[str, str]]:
         """解析并校验项目规则指标内容。"""

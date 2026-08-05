@@ -50,6 +50,19 @@ Compose 部署时，后端会使用 Docker 网络中的 `mysql:3306`；宿主机
 
 `SQLModel.metadata.create_all()` 不会为已有表补充字段。对已存在数据库，需要按已部署版本执行相应迁移。
 
+### 凭证原始进度与实际贡献
+
+部署凭证每日终审进度回退与回补能力前，执行仓库中的
+[`20260805_add_proof_record_progress_fields.sql`](../../scripts/migrations/20260805_add_proof_record_progress_fields.sql)：
+
+```bash
+docker compose exec -T mysql sh -c \
+  'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' \
+  < flame-sport-pheno-be/scripts/migrations/20260805_add_proof_record_progress_fields.sql
+```
+
+迁移会将 `preliminary_progress_delta` 重命名为 `increase`，新增 `progress_delta`，并使用历史 `increase` 保守回填历史原始增量。由于旧系统没有保存被进度条上限截断前的模型返回值，历史超额部分无法精确恢复；新代码上线后的凭证会完整保存两个值。
+
 ### 凭证重传实际进度增量
 
 部署“重传先撤销旧版本进度”后，执行仓库中的

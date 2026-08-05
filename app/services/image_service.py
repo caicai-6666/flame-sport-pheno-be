@@ -46,6 +46,22 @@ class ImageService:
         self._ensure_product_path_safe(product_path)
         return product_path
 
+    def get_project_icon_image_path(self, filename: str) -> Path:
+        """将项目图标相对地址转换为本地文件路径。"""
+        if not filename or not filename.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="项目图标路径不能为空",
+            )
+
+        icon_relative_path = Path(filename.strip().lstrip("/\\"))
+        # 兼容历史地址 /project_icon/xxx.png，统一以图标目录为根。
+        if icon_relative_path.parts and icon_relative_path.parts[0] == "project_icon":
+            icon_relative_path = Path(*icon_relative_path.parts[1:])
+        icon_path = settings.PROJECT_ICON_IMAGE_DIR / icon_relative_path
+        self._ensure_project_icon_path_safe(icon_path)
+        return icon_path
+
     def _ensure_avatar_path_safe(self, avatar_path: Path) -> None:
         """确保头像路径没有逃逸出头像存储目录。"""
         avatar_base_dir = settings.AVATAR_IMAGE_DIR.resolve()
@@ -64,6 +80,16 @@ class ImageService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="商品图片路径非法",
+            )
+
+    def _ensure_project_icon_path_safe(self, icon_path: Path) -> None:
+        """确保项目图标路径没有逃逸出项目图标目录。"""
+        icon_base_dir = settings.PROJECT_ICON_IMAGE_DIR.resolve()
+        resolved_icon_path = icon_path.resolve()
+        if not resolved_icon_path.is_relative_to(icon_base_dir):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="项目图标路径非法",
             )
 
 

@@ -5,7 +5,7 @@
 `proof_record` 表用于记录用户在赛季期间上传的运动凭证。
 
 当前平台中，用户在选择并锁定项目后，可以针对不同项目上传运动凭证。  
-赛季结束后，审核人员会统一审核用户本赛季上传的所有凭证，并根据用户是否达到所选挑战等级要求，最终结算积分到 `season_user.final_points`。
+初审通过后，凭证会先推进项目完成进度；管理员在赛季期间按日常工作节奏持续终审。终审失败时，系统撤销该凭证当前实际贡献的进度，并使用其他尚未完全分配进度的有效凭证回补空缺。
 
 当前设计中，一次上传只对应一张图片，因此图片路径直接存储在本表中，不单独设计图片文件表。
 
@@ -26,7 +26,8 @@
 | note           | VARCHAR(255)     |       否 |        NULL | 用户备注                               |
 | review_status  | VARCHAR(32)      |       是 |     pending | 初审与终审状态                         |
 | review_comment | VARCHAR(500)     |       否 |        NULL | 审核评论，用于后台人员填写审核说明     |
-| preliminary_progress_delta | DECIMAL(5,4) | 是 | 0.0000 | 当前版本初审通过实际增加的项目进度 |
+| progress_delta | DECIMAL(5,4) | 是 | 0.0000 | 大模型初审给出的原始项目进度增量 |
+| increase       | DECIMAL(5,4) | 是 | 0.0000 | 当前凭证实际分配到项目进度条的贡献 |
 | status         | TINYINT UNSIGNED |       是 |           1 | 记录状态：`1` 正常，`0` 无效/删除      |
 | created_at     | DATETIME         |       是 | CURRENT_TIMESTAMP | 上传时间                         |
 
@@ -159,7 +160,7 @@ MySQL 存储图片路径
 
 ### review_status
 
-审核状态。该字段不新增物理列，而是在原 `VARCHAR(32)` 字段中扩展状态值，以记录赛季内初审和赛后终审。
+审核状态。该字段使用一个 `VARCHAR(32)` 字段记录模型初审和管理员终审结果。
 
 取值：
 ```text
@@ -188,16 +189,42 @@ pending
 preliminary_approved
 preliminary_rejected
 ```
-初审通过的凭证计入排行榜；初审失败的凭证不计入，用户可重传后重新初审。赛季结束后再统一更新为 `approved` 或 `rejected`，用于最终审核和积分结算。
+初审通过的凭证计入排行榜；初审失败的凭证不计入，用户可重传后重新初审。管理员在赛季期间持续将初审通过记录更新为 `approved` 或 `rejected`。终审失败的凭证不再贡献项目进度，也不再计入后续排行榜快照。
 ---
 
-### preliminary_progress_delta
+### progress_delta
 
-当前版本的凭证初审通过后，实际推进 `season_user_project.completion_progress` 的数值。
+大模型初审给出的原始项目进度增量，取值范围为 `0.0000`～`1.0000`。
 
-该值不是模型返回的原始 `progressDelta`：当项目进度已经接近 `1` 时，系统只保存本次真正增加的剩余部分。例如进度从 `0.9000` 审核通过一个模型建议增加 `0.2000` 的凭证时，最终进度只能到 `1.0000`，本字段保存 `0.1000`。
+初审通过时保存模型返回的 `progressDelta`，即使当前项目进度已经达到 `1.0000`，也保留该原始值。初审失败、待初审和月初减重基线记录的值为 `0.0000`。同日重传时，本字段随旧初审结果一起清零，等待新版本重新初审。
 
-同日重传会先扣回这条旧版本凭证保存的实际增量，再重置凭证为待初审；新版本通过后再保存并累计新的实际增量。这样既不会在封顶场景扣多，也不会因重复上传重复累计进度。
+该字段为终审失败后的进度回补保留原始依据，不会因为进度条封顶而截断。对于迁移前已经存在的历史记录，旧系统没有保存被封顶前的原始值，迁移时保守使用原实际贡献进行回填。
+
+---
+
+### increase
+
+当前凭证实际分配到 `season_user_project.completion_progress` 的进度贡献，取值范围为 `0.0000`～`1.0000`，并始终满足：
+
+```text
+0 <= increase <= progress_delta
+```
+
+例如当前项目进度为 `0.9000`，一条初审通过凭证的 `progress_delta` 为 `0.2000`，进度条最多只能增加到 `1.0000`，因此该凭证保存：
+
+```text
+progress_delta = 0.2000
+increase = 0.1000
+```
+
+当管理员终审拒绝一条凭证时，该凭证的 `increase` 归零。系统在同一事务中锁定对应的 `season_user_project`，按 `created_at ASC, id ASC` 查询同一用户、同一赛季、同一项目下仍有效且 `progress_delta > increase` 的通过凭证，将释放的进度依次回补到这些凭证的 `increase`，最后同步更新项目进度条。
+
+同日重传也会先撤销旧版本的 `increase`，再将原记录重置为待初审。项目进度应始终满足：
+
+```text
+completion_progress = SUM(当前有效通过凭证的 increase)
+completion_progress <= 1.0000
+```
 
 ---
 
@@ -264,7 +291,8 @@ CREATE TABLE proof_record (
   note VARCHAR(255) DEFAULT NULL COMMENT '用户备注',
   review_status VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT '审核状态：pending待初审，preliminary_approved初审通过，preliminary_rejected初审失败，approved终审通过，rejected终审失败',
   review_comment VARCHAR(500) DEFAULT NULL COMMENT '审核评论，用于后台人员填写审核说明',
-  preliminary_progress_delta DECIMAL(5,4) NOT NULL DEFAULT 0.0000 COMMENT '当前版本初审通过实际增加的项目进度',
+  progress_delta DECIMAL(5,4) NOT NULL DEFAULT 0.0000 COMMENT '大模型初审给出的原始项目进度增量',
+  `increase` DECIMAL(5,4) NOT NULL DEFAULT 0.0000 COMMENT '当前凭证实际分配到项目进度条的贡献',
   status TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '状态：1正常，0无效/删除',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
   PRIMARY KEY (id),
@@ -274,6 +302,10 @@ CREATE TABLE proof_record (
   KEY idx_proof_record_review_status (review_status),
   KEY idx_proof_record_status (status),
   KEY idx_proof_record_created_at (created_at),
+  CONSTRAINT chk_proof_record_progress_delta
+    CHECK (progress_delta >= 0 AND progress_delta <= 1),
+  CONSTRAINT chk_proof_record_increase
+    CHECK (`increase` >= 0 AND `increase` <= progress_delta),
   CONSTRAINT fk_proof_record_season_user
     FOREIGN KEY (season_user_id) REFERENCES season_user(id),
   CONSTRAINT fk_proof_record_project

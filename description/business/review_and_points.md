@@ -2,7 +2,7 @@
 
 ## 审核状态
 
-`proof_record.review_status` 使用单一字段记录两个阶段的审核结果：赛季内定时初审，以及赛季结束后的统一终审。
+`proof_record.review_status` 使用单一字段记录两个阶段的审核结果：赛季内定时初审，以及管理员在赛季期间持续进行的终审。
 
 ```text
 pending
@@ -19,10 +19,10 @@ rejected
 | `pending` | 待初审；用户上传或当天重传后的初始状态 |
 | `preliminary_approved` | 初审通过；可计入当前赛季排行榜 |
 | `preliminary_rejected` | 初审失败；不计入排行榜，用户可重新上传 |
-| `approved` | 终审通过；保留其已初审通过的排行榜资格 |
-| `rejected` | 终审失败；保留其已初审通过的排行榜资格 |
+| `approved` | 终审通过；保留其项目进度和排行榜资格 |
+| `rejected` | 终审失败；撤销其项目进度，不计入后续排行榜快照 |
 
-上传接口只创建或重置为 `pending`。定时文本初审任务会根据用户 `note` 与其已选挑战等级对应的一条 `project_rule`，更新为 `preliminary_approved` 或 `preliminary_rejected`；凭证图片保留给赛后人工终审，不发送给模型。
+上传接口只创建或重置为 `pending`。定时文本初审任务会根据用户 `note` 与其已选挑战等级对应的一条 `project_rule`，更新为 `preliminary_approved` 或 `preliminary_rejected`；凭证图片保留给管理员人工终审，不发送给模型。
 
 状态流转：
 
@@ -46,9 +46,11 @@ proof_record.created_at <= 本轮扫描时间 - LLM_PRELIMINARY_REVIEW_MIN_AGE_S
 
 `season_user.level_id` 与 `proof_record.project_id` 共同定位唯一的启用 `project_rule`。等级 ID、赛季 ID、用户 ID、图片路径和项目其他等级规则都不会发送给模型。模型仅接收项目名称、凭证类型、该条规则、规则备注和用户 `note`；减重挑战的月初记录额外发送用户身高，月末记录额外发送同赛季最早通过月初记录的审核意见。
 
-模型返回 `reviewComment`、`reviewStatus` 和 `progressDelta`。普通项目通过时在同一事务内累加 `season_user_project.completion_progress` 并封顶到 `1`；减重挑战月初通过时进度保持 `0`，月末通过时直接设为 `1`。模型异常、超时或返回非法 JSON 时保持 `pending`，下次任务会补审。用户在模型调用期间重传凭证时，旧结果不会覆盖新内容。
+模型返回 `reviewComment`、`reviewStatus` 和 `progressDelta`。初审通过时，原始 `progressDelta` 保存到 `proof_record.progress_delta`，经过进度条上限分配后实际生效的部分保存到 `proof_record.increase`。普通项目在同一事务内累加 `season_user_project.completion_progress` 并封顶到 `1`；减重挑战月初通过时进度保持 `0`，月末通过时直接设为 `1`。模型异常、超时或返回非法 JSON 时保持 `pending`，下次任务会补审。用户在模型调用期间重传凭证时，旧结果不会覆盖新内容。
 
-同日重传的审核口径是“先撤销旧版本，再按新版本重算”：上传时若该项目当天已有初审通过记录，系统会锁定 `season_user_project` 行、扣回旧记录的 `preliminary_progress_delta`，并将不同上传配置下的旧通过记录软失效；同上传配置则原地重置为待审。新版本初审通过后，系统再记录其实际进度增量并累计；初审失败不回加旧进度。实际增量会考虑 `completion_progress = 1` 的封顶限制，避免扣回模型原始增量造成进度错误。
+同日重传的审核口径是“先撤销旧版本，再按新版本重算”：上传时若该项目当天已有初审通过记录，系统会锁定 `season_user_project` 行、扣回旧记录的 `increase`，并将释放的进度优先回补给同项目下更早上传且 `progress_delta > increase` 的有效通过凭证。不同上传配置下的旧通过记录会被软失效；同上传配置则原地重置为待审，同时清零 `progress_delta` 和 `increase`。新版本初审通过后再从剩余进度空间中分配新的贡献。
+
+管理员终审拒绝凭证时，在同一事务中将该记录的 `increase` 归零，并把释放的进度按 `created_at ASC, id ASC` 回补给同一 `season_user_id + project_id` 下 `status = 1`、审核状态为 `preliminary_approved` 或 `approved` 且 `progress_delta > increase` 的其他凭证。回补完成后同步更新 `season_user_project.completion_progress`。终审操作必须使用状态条件保证幂等，避免重复拒绝造成多次回退。
 
 `累计次数`、`累计天数`、`达标天数`、`累计距离`和`累计时长`是项目总目标，而非单条凭证的拒绝条件。初审只验证该条 `note` 是否满足规则中的单次门槛；通过后由 `progressDelta` 表示其对累计目标的贡献。审核意见不得以“次数不足”“天数不足”或“累计距离不足”等尚未完成累计目标的原因拒绝单条有效记录。
 
@@ -62,7 +64,7 @@ proof_record.created_at <= 本轮扫描时间 - LLM_PRELIMINARY_REVIEW_MIN_AGE_S
 
 `leaderboard_snapshot` 用于保存排行榜快照。
 
-当前设计口径是统计当前赛季已初审通过的有效凭证次数。初审失败和待初审凭证不会进入排行榜；终审发生在赛季结束后，不回溯改变赛季内的排行榜统计。减重挑战的月初记录只建立 BMI 基线，永不计数；同一用户同一项目的任意数量月末通过记录最多计为一次，避免重传或重复记录重复进入排行榜。
+当前设计口径是统计当前赛季仍具有初审或终审通过状态的有效凭证次数。待初审、初审失败和终审失败凭证不会进入排行榜；管理员终审失败后应刷新排行榜快照。减重挑战的月初记录只建立 BMI 基线，永不计数；同一用户同一项目的任意数量月末通过记录最多计为一次，避免重传或重复记录重复进入排行榜。
 
 快照表只保存 `season_user_id` 和 `checkin_count` 等必要数据，不保存 `rank_no` 和 `calculated_at`：
 
@@ -111,7 +113,7 @@ season_user.status >= season.required_project_count
 ```text
 proof_record.season_user_id = season_user.id
 proof_record.status = 1
-proof_record.review_status IN (preliminary_approved, approved, rejected)
+proof_record.review_status IN (preliminary_approved, approved)
 proof_record.created_at < 本次刷新时刻
 ```
 
@@ -128,7 +130,7 @@ record_type = 月末记录：同一 season_user + project 最多计 1 次
 
 ## 积分结算
 
-当前积分不是实时发放，而是在赛季结束后统一审核和结算。
+当前积分不是实时发放。管理员在赛季期间持续终审凭证，系统在赛季结束后根据终审结果统一结算积分。
 
 结算结果写入：
 

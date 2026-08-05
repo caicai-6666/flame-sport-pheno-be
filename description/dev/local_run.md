@@ -30,6 +30,16 @@ python-multipart
 app/core/config.py
 ```
 
+复制后端配置模板并按本地环境修改：
+
+```bash
+cp .env.example .env
+```
+
+仓库内的 `.env.example` 只列出后端 `Settings` 会读取的变量。前端的
+`VUE_APP_*`、`FRONTEND_PORT`，以及顶层 Docker Compose 使用的
+`MYSQL_*` 等部署变量，应在各自项目或顶层部署目录中维护，不要写入后端 `.env`。
+
 默认数据库连接：
 
 ```text
@@ -115,7 +125,7 @@ python -m unittest discover -s tests -p 'test_llm_sport_evaluation.py' -v
 uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-`main.py` 中的直接运行配置当前使用固定局域网地址；本地开发更建议使用上面的 uvicorn 命令。
+`../../app/main.py` 中的直接运行配置当前使用固定局域网地址；本地开发更建议使用上面的 uvicorn 命令。
 
 所有服务接口均以 `/flame/api` 为公共前缀。OpenAPI 文档、Redoc 和 OpenAPI JSON 分别为：
 
@@ -157,3 +167,9 @@ LEADERBOARD_REFRESH_INTERVAL_SECONDS=900
 ```
 
 默认每 15 分钟刷新一次；本地调试时可以将 `LEADERBOARD_REFRESH_INTERVAL_SECONDS` 改小，例如 `60`。
+
+图片接口的浏览器私有缓存时长可通过以下配置调整，单位为秒，默认缓存 7 天：
+
+```text
+IMAGE_CACHE_MAX_AGE_SECONDS=604800
+```

@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from pathlib import Path
 from time import monotonic
 
@@ -16,10 +16,10 @@ from app.repositories.project_repository import project_repository
 from app.repositories.proof_record_repository import proof_record_repository
 from app.repositories.season_repository import season_repository
 from app.repositories.season_user_repository import season_user_repository
+from app.services.project_progress_service import project_progress_service
 
 
 UPLOAD_CONFIG_CACHE_TTL_SECONDS = 300
-PROGRESS_PRECISION = Decimal("0.0001")
 
 
 class ProofService:
@@ -299,26 +299,23 @@ class ProofService:
                 next_day_start=next_day_start,
             )
         )
+        replaced_record_ids = [
+            replaced_record.id
+            for replaced_record in replaced_records
+            if replaced_record.id is not None
+        ]
+        released_increase = sum(
+            (replaced_record.increase for replaced_record in replaced_records),
+            Decimal("0.0000"),
+        )
         if replaced_records:
-            # 重传先撤销当天旧版本实际贡献；进度曾被封顶时只能扣回实际增加量，
-            # 不能直接使用模型原始 progressDelta。
-            self._reverse_project_progress(
-                project_lock=project_lock,
-                progress_delta=sum(
-                    (
-                        replaced_record.preliminary_progress_delta
-                        for replaced_record in replaced_records
-                    ),
-                    Decimal("0.0000"),
-                ),
-            )
+            # 不同上传配置的旧版本软失效；同配置记录在下方原地重置为待审。
             await proof_record_repository.deactivate_records(
                 session=session,
                 proof_record_ids=[
-                    replaced_record.id
-                    for replaced_record in replaced_records
-                    if replaced_record.id is not None
-                    and replaced_record.id != (proof_record.id if proof_record else None)
+                    replaced_record_id
+                    for replaced_record_id in replaced_record_ids
+                    if replaced_record_id != (proof_record.id if proof_record else None)
                 ],
             )
         if proof_record is None:
@@ -330,6 +327,14 @@ class ProofService:
                 image_url=image_url,
                 note=note,
                 created_at=uploaded_at,
+            )
+            await project_progress_service.release_and_redistribute(
+                session=session,
+                project_lock=project_lock,
+                season_user_id=season_user_id,
+                project_id=project_id,
+                released_increase=released_increase,
+                excluded_proof_record_ids=replaced_record_ids,
             )
             return None
 
@@ -343,23 +348,19 @@ class ProofService:
         proof_record.note = note
         proof_record.review_status = ProofReviewStatus.PENDING.value
         proof_record.review_comment = None
-        proof_record.preliminary_progress_delta = Decimal("0.0000")
+        proof_record.progress_delta = Decimal("0.0000")
+        proof_record.increase = Decimal("0.0000")
         proof_record.created_at = uploaded_at
         await session.flush()
-        return old_image_path
-
-    def _reverse_project_progress(
-        self,
-        project_lock: SeasonUserProject,
-        progress_delta: Decimal,
-    ) -> None:
-        """撤销被重传凭证替换的旧版本实际进度。"""
-        project_lock.completion_progress = max(
-            Decimal("0.0000"),
-            (
-                project_lock.completion_progress - progress_delta
-            ).quantize(PROGRESS_PRECISION, rounding=ROUND_HALF_UP),
+        await project_progress_service.release_and_redistribute(
+            session=session,
+            project_lock=project_lock,
+            season_user_id=season_user_id,
+            project_id=project_id,
+            released_increase=released_increase,
+            excluded_proof_record_ids=replaced_record_ids,
         )
+        return old_image_path
 
     def _build_upload_config_item(
         self,

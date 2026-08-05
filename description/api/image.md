@@ -13,6 +13,7 @@
 | GET | `/flame/api/image` | 否 | 图片子路由存活校验 |
 | GET | `/flame/api/image/avatar` | 是 | 获取当前用户头像图片 |
 | GET | `/flame/api/image/product` | 是 | 获取指定商品图片 |
+| GET | `/flame/api/image/project_icon` | 是 | 获取指定项目图标 |
 
 ## 通用鉴权
 
@@ -21,6 +22,16 @@
 ```http
 Authorization: auth_code
 ```
+
+## 图片缓存
+
+头像、商品图片和项目图标响应都会设置：
+
+```http
+Cache-Control: private, max-age={IMAGE_CACHE_MAX_AGE_SECONDS}
+```
+
+默认值为 `604800`（7 天）。图片接口需要登录态，因此缓存限定为当前浏览器私有缓存，代理和 CDN 等共享缓存不得复用响应。
 
 ## GET /flame/api/image
 
@@ -72,7 +83,7 @@ Authorization: auth_code
 1. 从 `Authorization` 解析当前用户 ID。
 2. 读取 query 参数 `filename`。
 3. 去掉前导 `/` 或 `\`。
-4. 拼接到本地商品图片目录 `assets/api/images/product`。
+4. 拼接到本地商品图片目录 `assets/images/product`。
 5. 校验路径没有逃逸出商品图片目录。
 6. 返回商品图片文件。
 
@@ -92,3 +103,31 @@ Content-Type: image/jpeg
 | 400 | 商品图片路径为空 | `商品图片路径不能为空` |
 | 400 | 商品图片路径非法 | `商品图片路径非法` |
 | 404 | 商品图片不存在 | `商品图片文件不存在` |
+
+## GET /flame/api/image/project_icon
+
+请求示例：
+
+```http
+GET /flame/api/image/project_icon?filename=%2F%E8%B7%91%E6%AD%A5.png
+Authorization: auth_code
+```
+
+该接口接收项目列表返回的 `image` 值。后端会去掉前导 `/` 或 `\`，兼容移除历史 `/project_icon/` 前缀后，将其拼接到本地目录 `assets/images/project_icon`，校验路径安全后直接返回图片文件，不进行 Base64 编码。
+
+前端应使用 `encodeURIComponent(image)` 生成 `filename` 参数。
+
+成功响应示例：
+
+```http
+Content-Type: image/png
+```
+
+错误响应：
+
+| 状态码 | 场景 | detail |
+| --- | --- | --- |
+| 401 | 未登录或登录过期 | `登录状态无效或已过期，请重新登录` |
+| 400 | 项目图标路径为空 | `项目图标路径不能为空` |
+| 400 | 项目图标路径非法 | `项目图标路径非法` |
+| 404 | 项目图标不存在 | `项目图标文件不存在` |

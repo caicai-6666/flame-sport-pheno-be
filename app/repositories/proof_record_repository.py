@@ -109,6 +109,7 @@ class ProofRecordRepository:
         expected_note: str | None,
         review_status: ProofReviewStatus,
         review_comment: str,
+        progress_delta: Decimal,
     ) -> bool:
         """仅在用户未重传同一凭证时写回初审结果，避免覆盖新提交内容。"""
         statement = (
@@ -121,21 +122,22 @@ class ProofRecordRepository:
             .values(
                 review_status=review_status.value,
                 review_comment=review_comment,
-                preliminary_progress_delta=Decimal("0.0000"),
+                progress_delta=progress_delta,
+                increase=Decimal("0.0000"),
             )
         )
         result = await session.execute(statement)
         return bool(result.rowcount)
 
-    async def set_preliminary_progress_delta_if_approved(
+    async def set_increase_if_preliminary_approved(
         self,
         session: AsyncSession,
         proof_record_id: int,
         expected_created_at: datetime,
         expected_note: str | None,
-        preliminary_progress_delta: Decimal,
+        increase: Decimal,
     ) -> bool:
-        """记录本条凭证实际增加的进度，供同日重传时精确撤销。"""
+        """记录本条凭证当前实际分配到项目进度条的贡献。"""
         statement = (
             update(ProofRecord)
             .where(ProofRecord.id == proof_record_id)
@@ -146,7 +148,7 @@ class ProofRecordRepository:
             )
             .where(ProofRecord.created_at == expected_created_at)
             .where(ProofRecord.note == expected_note)
-            .values(preliminary_progress_delta=preliminary_progress_delta)
+            .values(increase=increase)
         )
         result = await session.execute(statement)
         return bool(result.rowcount)
@@ -191,8 +193,40 @@ class ProofRecordRepository:
             update(ProofRecord)
             .where(ProofRecord.id.in_(proof_record_ids))
             .where(ProofRecord.status == 1)
-            .values(status=0),
+            .values(status=0, increase=Decimal("0.0000")),
         )
+
+    async def list_progress_refill_candidates(
+        self,
+        session: AsyncSession,
+        season_user_id: int,
+        project_id: int,
+        excluded_proof_record_ids: list[int] | None = None,
+    ) -> list[ProofRecord]:
+        """按稳定顺序锁定仍有原始进度可分配的有效通过凭证。"""
+        statement = (
+            select(ProofRecord)
+            .where(ProofRecord.season_user_id == season_user_id)
+            .where(ProofRecord.project_id == project_id)
+            .where(ProofRecord.status == 1)
+            .where(
+                ProofRecord.review_status.in_(
+                    (
+                        ProofReviewStatus.PRELIMINARY_APPROVED.value,
+                        ProofReviewStatus.APPROVED.value,
+                    )
+                )
+            )
+            .where(ProofRecord.progress_delta > ProofRecord.increase)
+            .order_by(ProofRecord.created_at.asc(), ProofRecord.id.asc())
+            .with_for_update()
+        )
+        if excluded_proof_record_ids:
+            statement = statement.where(
+                ProofRecord.id.not_in(excluded_proof_record_ids)
+            )
+        result = await session.execute(statement)
+        return list(result.scalars().all())
 
     async def get_today_record(
         self,

@@ -45,7 +45,7 @@ POST /flame/api/proof/upload
     "project_id": 1,
     "name": "步行",
     "description": "把日常运动转化为稳定积分。",
-    "image": "base64字符串"
+    "image": "/日常步数.png"
   }
 ]
 ```
@@ -57,7 +57,11 @@ project.status = 1
 ORDER BY project.id ASC
 ```
 
-`image` 由 `project.icon_url` 对应的本地项目图标读取后转为 base64。
+`image` 直接返回 `project.icon_url` 保存的项目图标相对地址，例如 `/日常步数.png`。前端获取图标时应请求：
+
+```text
+GET /flame/api/image/project_icon?filename={encodeURIComponent(image)}
+```
 
 ## GET /flame/api/project/rules
 

@@ -4,11 +4,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_session
 from app.core.security import get_current_user_id
 from app.services.image_service import image_service
 
 router = APIRouter(prefix="/image", tags=["image"])
+IMAGE_CACHE_CONTROL = (
+    f"private, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}"
+)
 
 
 @router.get("")
@@ -35,6 +39,7 @@ async def get_avatar(
         media_type=mimetypes.guess_type(image_path.name)[0]
         or "application/octet-stream",
         filename=image_path.name,
+        headers={"Cache-Control": IMAGE_CACHE_CONTROL},
     )
 
 
@@ -52,4 +57,23 @@ async def get_product_image(
         path=image_path,
         media_type="image/jpeg",
         filename=image_path.name,
+        headers={"Cache-Control": IMAGE_CACHE_CONTROL},
+    )
+
+
+@router.get("/project_icon")
+async def get_project_icon_image(
+    filename: str = Query(..., min_length=1),
+    user_id: str = Depends(get_current_user_id),
+):
+    """校验 Authorization 后，返回指定项目图标文件。"""
+    image_path = image_service.get_project_icon_image_path(filename=filename)
+    if not image_path.is_file():
+        raise HTTPException(status_code=404, detail="项目图标文件不存在")
+
+    return FileResponse(
+        path=image_path,
+        media_type=mimetypes.guess_type(image_path.name)[0]
+        or "application/octet-stream",
+        headers={"Cache-Control": IMAGE_CACHE_CONTROL},
     )

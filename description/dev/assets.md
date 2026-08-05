@@ -44,17 +44,23 @@ settings.AVATAR_IMAGE_DIR / user.avatar_url.lstrip("/")
 项目图标目录：
 
 ```text
-assets/api/images/api/project_icon
+assets/images/project_icon
 ```
 
-项目列表接口会读取 `project.icon_url` 对应文件，并返回 base64 字符串。
+项目列表接口直接返回 `project.icon_url` 保存的相对地址，例如 `/跑步.png`。前端再通过：
+
+```text
+GET /flame/api/image/project_icon?filename={encodeURIComponent(project.image)}
+```
+
+读取对应图片文件。
 
 ## product
 
 商品图片目录：
 
 ```text
-assets/api/images/product
+assets/images/product
 ```
 
 商城信息接口只返回 `product.image_url` 字符串，不返回图片文件。
