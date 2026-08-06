@@ -21,7 +21,7 @@ assets/
 assets/images/avatar
 ```
 
-首次钉钉登录初始化时，如钉钉返回头像地址，服务端会下载 JPEG、PNG 或 WebP 图片并统一转换为 JPEG。文件名为安全化后的钉钉 `userId` 加小写 `.jpg`，例如：
+首次钉钉登录初始化时，如钉钉返回头像地址，服务端会下载 JPEG、PNG 或 WebP 图片并统一转换为不超过 300 KiB 的 JPEG。文件名为安全化后的钉钉 `userId` 加小写 `.jpg`，例如：
 
 ```text
 james.jpg
@@ -78,6 +78,16 @@ GET /api/image/product?filename={encodeURIComponent(product.image_url)}
 ```
 
 后端会去掉前导 `/` 或 `\`，再拼接到 `settings.PRODUCT_IMAGE_DIR`。
+
+商品图应尽量控制在 450 KiB 以内，避免商城列表在移动网络下加载过慢。对于已经写入 Docker 具名卷的历史大图，可将后端仓库中的脚本复制进正在运行的后端容器后执行；脚本会先将原图备份到同一资源卷的 `backups/product_before_YYYYMMDD/`，再替换压缩后的文件：
+
+```bash
+docker cp scripts/optimize_product_images.py flame-sport-pheno-backend-1:/tmp/
+docker exec flame-sport-pheno-backend-1 python /tmp/optimize_product_images.py \
+  --source-dir /app/assets/images/product \
+  --backup-dir /app/assets/backups/product_before_YYYYMMDD \
+  --target-kib 450
+```
 
 ## proof_record
 

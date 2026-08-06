@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,6 +62,7 @@ async def upload_project_proof(
     project_id: int = Form(..., ge=1),
     project_upload_config_id: int = Form(..., ge=1),
     record_type: str | None = Form(default=None),
+    proof_date: date = Form(...),
     note: str = Form(...),
     image: UploadFile = File(...),
     user_id: str = Depends(get_current_user_id),
@@ -71,6 +74,7 @@ async def upload_project_proof(
         project_id=project_id,
         project_upload_config_id=project_upload_config_id,
         record_type=record_type,
+        proof_date=proof_date,
         note=note,
         image=image,
         user_id=user_id,

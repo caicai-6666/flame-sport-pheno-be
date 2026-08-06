@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from time import monotonic
@@ -69,15 +69,27 @@ class ProofService:
         project_id: int,
         project_upload_config_id: int,
         record_type: str | None,
+        proof_date: date,
         note: str,
         image: UploadFile,
         user_id: str,
         session: AsyncSession,
     ) -> dict[str, str]:
-        """上传或更新当前用户当天的项目凭证。"""
+        """上传或更新当前用户指定运动日期的项目凭证。"""
         normalized_record_type = self._normalize_record_type(record_type)
         normalized_note = self._normalize_note(note)
         await self._ensure_jpg_image(image)
+
+        season = await season_repository.get_by_id(
+            session=session,
+            season_id=season_id,
+        )
+        if season is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="赛季不存在",
+            )
+        self._validate_proof_date(season=season, proof_date=proof_date)
 
         season_user = await season_user_repository.get_by_season_id_and_user_id(
             session=session,
@@ -139,7 +151,7 @@ class ProofService:
         old_image_path: Path | None = None
         saved_new_image = False
         try:
-            # 锁定赛季用户行，避免并发上传时同时插入当天重复凭证。
+            # 锁定赛季用户行，避免并发上传时同时写入同项目同运动日期的凭证。
             locked_season_user = await season_user_repository.lock_by_id(
                 session=session,
                 season_user_id=season_user.id,
@@ -163,13 +175,14 @@ class ProofService:
             # 保存文件后写数据库；如果数据库失败，会删除本次新文件避免残留。
             image_path.write_bytes(image_bytes)
             saved_new_image = True
-            old_image_path = await self._create_or_update_today_proof_record(
+            old_image_path = await self._create_or_update_proof_record_for_date(
                 session=session,
                 season_user_id=season_user.id,
                 project_id=project_id,
                 project_upload_config_id=project_upload_config_id,
                 image_url=image_url,
                 note=normalized_note,
+                proof_date=proof_date,
                 uploaded_at=uploaded_at,
                 season_id=season_id,
                 project_lock=locked_project,
@@ -189,7 +202,10 @@ class ProofService:
         if old_image_path is not None:
             self._remove_file_if_exists(old_image_path)
 
-        return {"created_at": uploaded_at.isoformat(timespec="seconds")}
+        return {
+            "created_at": uploaded_at.isoformat(timespec="seconds"),
+            "proof_date": proof_date.isoformat(),
+        }
 
     async def list_user_proof_history(
         self,
@@ -213,6 +229,7 @@ class ProofService:
                 "imageName": self._build_display_proof_image_name(
                     proof_record.image_url,
                 ),
+                "proofDate": proof_record.proof_date.isoformat(),
                 "createdAt": proof_record.created_at.isoformat(timespec="seconds"),
             }
             for proof_record, season, project in history_records
@@ -242,6 +259,7 @@ class ProofService:
                 "imageName": self._build_display_proof_image_name(
                     proof_record.image_url,
                 ),
+                "proofDate": proof_record.proof_date.isoformat(),
                 "createdAt": proof_record.created_at.isoformat(timespec="seconds"),
             }
             for proof_record, season, project in current_records
@@ -267,7 +285,7 @@ class ProofService:
             required_project_count=season.required_project_count,
         )
 
-    async def _create_or_update_today_proof_record(
+    async def _create_or_update_proof_record_for_date(
         self,
         session: AsyncSession,
         season_user_id: int,
@@ -275,49 +293,18 @@ class ProofService:
         project_upload_config_id: int,
         image_url: str,
         note: str | None,
+        proof_date: date,
         uploaded_at: datetime,
         season_id: int,
         project_lock: SeasonUserProject,
     ) -> Path | None:
-        """创建或更新当天同项目同上传配置的凭证记录。"""
-        day_start = uploaded_at.replace(hour=0, minute=0, second=0, microsecond=0)
-        next_day_start = day_start + timedelta(days=1)
-        proof_record = await proof_record_repository.get_today_record(
+        """创建或更新同项目同运动日期的唯一有效凭证记录。"""
+        proof_record = await proof_record_repository.get_active_record_by_proof_date(
             session=session,
             season_user_id=season_user_id,
             project_id=project_id,
-            project_upload_config_id=project_upload_config_id,
-            day_start=day_start,
-            next_day_start=next_day_start,
+            proof_date=proof_date,
         )
-        replaced_records = (
-            await proof_record_repository.list_today_preliminary_approved_records(
-                session=session,
-                season_user_id=season_user_id,
-                project_id=project_id,
-                day_start=day_start,
-                next_day_start=next_day_start,
-            )
-        )
-        replaced_record_ids = [
-            replaced_record.id
-            for replaced_record in replaced_records
-            if replaced_record.id is not None
-        ]
-        released_increase = sum(
-            (replaced_record.increase for replaced_record in replaced_records),
-            Decimal("0.0000"),
-        )
-        if replaced_records:
-            # 不同上传配置的旧版本软失效；同配置记录在下方原地重置为待审。
-            await proof_record_repository.deactivate_records(
-                session=session,
-                proof_record_ids=[
-                    replaced_record_id
-                    for replaced_record_id in replaced_record_ids
-                    if replaced_record_id != (proof_record.id if proof_record else None)
-                ],
-            )
         if proof_record is None:
             await proof_record_repository.create(
                 session=session,
@@ -326,15 +313,8 @@ class ProofService:
                 project_upload_config_id=project_upload_config_id,
                 image_url=image_url,
                 note=note,
+                proof_date=proof_date,
                 created_at=uploaded_at,
-            )
-            await project_progress_service.release_and_redistribute(
-                session=session,
-                project_lock=project_lock,
-                season_user_id=season_user_id,
-                project_id=project_id,
-                released_increase=released_increase,
-                excluded_proof_record_ids=replaced_record_ids,
             )
             return None
 
@@ -343,13 +323,16 @@ class ProofService:
             new_image_url=image_url,
             season_id=season_id,
         )
-        # 重传代表用户提交了新凭证，必须重新进入待初审，不能沿用旧初审结论。
+        # 重传必须先释放旧记录的实际贡献；终审通过记录也不能遗留旧进度。
+        released_increase = proof_record.increase
+        proof_record.project_upload_config_id = project_upload_config_id
         proof_record.image_url = image_url
         proof_record.note = note
         proof_record.review_status = ProofReviewStatus.PENDING.value
         proof_record.review_comment = None
         proof_record.progress_delta = Decimal("0.0000")
         proof_record.increase = Decimal("0.0000")
+        proof_record.proof_date = proof_date
         proof_record.created_at = uploaded_at
         await session.flush()
         await project_progress_service.release_and_redistribute(
@@ -358,9 +341,22 @@ class ProofService:
             season_user_id=season_user_id,
             project_id=project_id,
             released_increase=released_increase,
-            excluded_proof_record_ids=replaced_record_ids,
+            excluded_proof_record_ids=[proof_record.id] if proof_record.id else None,
         )
         return old_image_path
+
+    def _validate_proof_date(self, season, proof_date: date) -> None:
+        """服务端校验用户选择的运动日期，避免绕过前端日期控件。"""
+        if proof_date > datetime.now().date():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="凭证日期不能晚于今天",
+            )
+        if proof_date < season.start_date or proof_date > season.end_date:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="凭证日期必须在赛季期间内",
+            )
 
     def _build_upload_config_item(
         self,

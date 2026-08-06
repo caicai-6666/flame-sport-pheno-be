@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, Column, DateTime, Numeric, text
+from sqlalchemy import CheckConstraint, Column, Date, DateTime, Numeric, text
 from sqlmodel import Field, SQLModel
 
 
@@ -44,6 +44,8 @@ class ProofRecord(SQLModel, table=True):
     project_upload_config_id: int
     image_url: str = Field(max_length=500)
     note: str | None = Field(default=None, max_length=255)
+    # 运动实际发生日期；与 created_at（实际提交时间）分开保存。
+    proof_date: date = Field(sa_column=Column(Date, nullable=False))
     review_status: str = Field(
         default=ProofReviewStatus.PENDING.value,
         max_length=32,

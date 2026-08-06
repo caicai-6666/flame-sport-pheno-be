@@ -22,7 +22,18 @@ from app.core.preliminary_review_scheduler import (
     stop_preliminary_review_task,
 )
 from app.core.storage import ensure_asset_directories
-from app.routers import auth, health, image, leaderboard, project, proof, season, shop, user
+from app.routers import (
+    auth,
+    health,
+    image,
+    leaderboard,
+    project,
+    proof,
+    season,
+    shop,
+    suggestion,
+    user,
+)
 
 API_PREFIX = "/flame/api"
 
@@ -73,6 +84,7 @@ def create_app() -> FastAPI:
     application.include_router(proof.router, prefix=API_PREFIX)
     application.include_router(season.router, prefix=API_PREFIX)
     application.include_router(shop.router, prefix=API_PREFIX)
+    application.include_router(suggestion.router, prefix=API_PREFIX)
     application.include_router(user.router, prefix=API_PREFIX)
     return application
 

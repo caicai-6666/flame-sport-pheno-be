@@ -3,7 +3,7 @@
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -157,7 +157,7 @@ class PreliminaryReviewService:
                 progress_delta=review_result.progress_delta,
             )
             # 同一赛季项目的通过结果必须串行写入：这样多实例同时初审时，后一条
-            # 通过凭证仍会可靠地替换当天旧记录，而不会把进度重复累计。
+            # 通过凭证仍会可靠地替换同运动日期旧记录，而不会把进度重复累计。
             project_lock = await season_user_repository.lock_active_project(
                 session=session,
                 season_user_id=season_user.id,
@@ -189,21 +189,17 @@ class PreliminaryReviewService:
         if review_result.review_status == ProofReviewStatus.PRELIMINARY_APPROVED:
             if project_lock is None:
                 raise RuntimeError("初审凭证缺少项目锁")
-            day_start = proof_record.created_at.replace(
-                hour=0, minute=0, second=0, microsecond=0,
-            )
             replaced_records = (
-                await proof_record_repository.list_today_preliminary_approved_records(
+                await proof_record_repository.list_same_proof_date_preliminary_approved_records(
                     session=session,
                     season_user_id=season_user.id,
                     project_id=proof_record.project_id,
-                    day_start=day_start,
-                    next_day_start=day_start + timedelta(days=1),
+                    proof_date=proof_record.proof_date,
                     excluded_proof_record_id=proof_record.id,
                 )
             )
             if replaced_records:
-                # 同项目当天只保留最新版本；旧版本释放的实际贡献优先回补给
+                # 同项目同运动日期只保留最新版本；旧版本释放的实际贡献优先回补给
                 # 更早上传且因封顶未完全分配进度的有效凭证。
                 replaced_record_ids = [
                     old_proof_record.id

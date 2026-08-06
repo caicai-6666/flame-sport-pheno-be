@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from decimal import Decimal
 
@@ -64,7 +64,7 @@ class ProofRecordRepository:
             .where(ProofRecord.status == 1)
             .where(ProofRecord.review_status == ProofReviewStatus.PENDING.value)
             .where(ProofRecord.created_at < cutoff_at)
-            # 同一用户项目按上传时间处理，使当天重传的最新凭证最后写入审核结果。
+            # 同一用户项目按上传时间处理，使同运动日期重传的最新凭证最后写入审核结果。
             .order_by(
                 Project.id.asc(),
                 SeasonUser.id.asc(),
@@ -96,7 +96,11 @@ class ProofRecordRepository:
             )
             .where(ProjectUploadConfig.record_type == MONTH_START_RECORD_TYPE)
             .where(ProofRecord.review_comment.is_not(None))
-            .order_by(ProofRecord.created_at.asc(), ProofRecord.id.asc())
+            .order_by(
+                ProofRecord.proof_date.asc(),
+                ProofRecord.created_at.asc(),
+                ProofRecord.id.asc(),
+            )
             .limit(1)
         )
         return result.scalar_one_or_none()
@@ -153,16 +157,15 @@ class ProofRecordRepository:
         result = await session.execute(statement)
         return bool(result.rowcount)
 
-    async def list_today_preliminary_approved_records(
+    async def list_same_proof_date_preliminary_approved_records(
         self,
         session: AsyncSession,
         season_user_id: int,
         project_id: int,
-        day_start: datetime,
-        next_day_start: datetime,
+        proof_date: date,
         excluded_proof_record_id: int | None = None,
     ) -> list[ProofRecord]:
-        """查询当天同项目仍有效的初审通过记录，供新版本替换时撤销贡献。"""
+        """查询同运动日期的有效初审通过记录，兼容迁移前的重复数据。"""
         statement = (
             select(ProofRecord)
             .where(ProofRecord.season_user_id == season_user_id)
@@ -172,9 +175,12 @@ class ProofRecordRepository:
                 ProofRecord.review_status
                 == ProofReviewStatus.PRELIMINARY_APPROVED.value
             )
-            .where(ProofRecord.created_at >= day_start)
-            .where(ProofRecord.created_at < next_day_start)
-            .order_by(ProofRecord.created_at.asc(), ProofRecord.id.asc())
+            .where(ProofRecord.proof_date == proof_date)
+            .order_by(
+                ProofRecord.proof_date.asc(),
+                ProofRecord.created_at.asc(),
+                ProofRecord.id.asc(),
+            )
         )
         if excluded_proof_record_id is not None:
             statement = statement.where(ProofRecord.id != excluded_proof_record_id)
@@ -228,26 +234,23 @@ class ProofRecordRepository:
         result = await session.execute(statement)
         return list(result.scalars().all())
 
-    async def get_today_record(
+    async def get_active_record_by_proof_date(
         self,
         session: AsyncSession,
         season_user_id: int,
         project_id: int,
-        project_upload_config_id: int,
-        day_start: datetime,
-        next_day_start: datetime,
+        proof_date: date,
     ) -> ProofRecord | None:
-        """查询用户当天同项目同上传配置的有效凭证记录。"""
+        """查询用户同项目同运动日期的唯一有效凭证记录。"""
         result = await session.execute(
             select(ProofRecord)
             .where(ProofRecord.season_user_id == season_user_id)
             .where(ProofRecord.project_id == project_id)
-            .where(ProofRecord.project_upload_config_id == project_upload_config_id)
             .where(ProofRecord.status == 1)
-            .where(ProofRecord.created_at >= day_start)
-            .where(ProofRecord.created_at < next_day_start)
+            .where(ProofRecord.proof_date == proof_date)
             .order_by(ProofRecord.created_at.desc(), ProofRecord.id.desc())
             .limit(1)
+            .with_for_update()
         )
         return result.scalar_one_or_none()
 
@@ -259,6 +262,7 @@ class ProofRecordRepository:
         project_upload_config_id: int,
         image_url: str,
         note: str | None,
+        proof_date: date,
         created_at: datetime,
     ) -> ProofRecord:
         """创建凭证记录。"""
@@ -268,6 +272,7 @@ class ProofRecordRepository:
             project_upload_config_id=project_upload_config_id,
             image_url=image_url,
             note=note,
+            proof_date=proof_date,
             review_status=ProofReviewStatus.PENDING.value,
             review_comment=None,
             status=1,
@@ -292,7 +297,11 @@ class ProofRecordRepository:
             .where(SeasonUser.user_id == user_id)
             .where(SeasonUser.season_id != excluded_season_id)
             .where(ProofRecord.status == 1)
-            .order_by(ProofRecord.created_at.desc(), ProofRecord.id.desc())
+            .order_by(
+                ProofRecord.proof_date.desc(),
+                ProofRecord.created_at.desc(),
+                ProofRecord.id.desc(),
+            )
         )
         return list(result.all())
 
@@ -311,7 +320,11 @@ class ProofRecordRepository:
             .where(SeasonUser.user_id == user_id)
             .where(SeasonUser.season_id == current_season_id)
             .where(ProofRecord.status == 1)
-            .order_by(ProofRecord.created_at.desc(), ProofRecord.id.desc())
+            .order_by(
+                ProofRecord.proof_date.desc(),
+                ProofRecord.created_at.desc(),
+                ProofRecord.id.desc(),
+            )
         )
         return list(result.all())
 

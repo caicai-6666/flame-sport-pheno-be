@@ -10,6 +10,13 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from app.core.config import settings
 
 
+# 首次登录可能拿到高分辨率企业头像，限制本地文件避免排行榜重复加载大图。
+AVATAR_JPEG_MAX_BYTES = 300 * 1024
+_AVATAR_JPEG_QUALITY_STEPS = (90, 85, 80, 75, 70, 65, 60, 55)
+_AVATAR_RESIZE_RATIO = 0.85
+_AVATAR_MIN_DIMENSION = 128
+
+
 @dataclass(frozen=True)
 class SavedAvatarImage:
     """本次头像覆盖前的状态，用于数据库事务失败时恢复文件。"""
@@ -101,20 +108,43 @@ def _write_bytes_atomically(*, path: Path, content: bytes) -> None:
 
 
 def _convert_avatar_to_jpeg(content: bytes) -> bytes:
-    """解码远端图片并重编码为标准 JPEG，确保后缀和真实格式一致。"""
+    """解码远端图片并重编码为不超过 300 KiB 的标准 JPEG。"""
     try:
         with Image.open(BytesIO(content)) as source_image:
             normalized_image = ImageOps.exif_transpose(source_image).convert("RGB")
-            output = BytesIO()
-            normalized_image.save(
-                output,
-                format="JPEG",
-                quality=90,
-                optimize=True,
-            )
-            return output.getvalue()
+            return _encode_avatar_jpeg_with_size_limit(normalized_image)
     except (OSError, UnidentifiedImageError) as exc:
         raise ValueError("头像图片无法转换为 JPEG") from exc
+
+
+def _encode_avatar_jpeg_with_size_limit(image: Image.Image) -> bytes:
+    """优先降低 JPEG 质量，必要时缩放尺寸，确保首次初始化不会写入大头像。"""
+    current_image = image
+    while True:
+        for quality in _AVATAR_JPEG_QUALITY_STEPS:
+            output = BytesIO()
+            current_image.save(
+                output,
+                format="JPEG",
+                quality=quality,
+                optimize=True,
+                progressive=True,
+            )
+            encoded_image = output.getvalue()
+            if len(encoded_image) <= AVATAR_JPEG_MAX_BYTES:
+                return encoded_image
+
+        width, height = current_image.size
+        if min(width, height) <= _AVATAR_MIN_DIMENSION:
+            # 极端噪点图在最低质量和最小尺寸下仍超限时不能写入，避免突破存储上限。
+            raise ValueError("头像图片压缩后仍超过 300 KiB")
+        current_image = current_image.resize(
+            (
+                max(_AVATAR_MIN_DIMENSION, int(width * _AVATAR_RESIZE_RATIO)),
+                max(_AVATAR_MIN_DIMENSION, int(height * _AVATAR_RESIZE_RATIO)),
+            ),
+            Image.Resampling.LANCZOS,
+        )
 
 
 def _normalize_proof_record_timestamp(timestamp: datetime | int | str) -> str:

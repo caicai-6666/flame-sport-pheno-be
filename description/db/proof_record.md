@@ -24,6 +24,7 @@
 | project_upload_config_id | BIGINT UNSIGNED | 是 | 无 | 项目上传配置 ID，关联 `project_upload_config.id` |
 | image_url      | VARCHAR(500)     |       是 |          无 | 上传图片路径                           |
 | note           | VARCHAR(255)     |       否 |        NULL | 用户备注                               |
+| proof_date     | DATE             |       是 |          无 | 凭证对应的实际运动日期                 |
 | review_status  | VARCHAR(32)      |       是 |     pending | 初审与终审状态                         |
 | review_comment | VARCHAR(500)     |       否 |        NULL | 审核评论，用于后台人员填写审核说明     |
 | progress_delta | DECIMAL(5,4) | 是 | 0.0000 | 大模型初审给出的原始项目进度增量 |
@@ -158,6 +159,22 @@ MySQL 存储图片路径
 
 ---
 
+### proof_date
+
+凭证对应的实际运动日期，格式为 `YYYY-MM-DD`。
+
+普通上传与补传均由前端提交该字段；普通上传页面默认选择当天，补传页面可选择赛季内的过去日期。后端必须再次校验：
+
+```text
+season.start_date <= proof_date <= min(season.end_date, 今天)
+```
+
+`proof_date` 不等于 `created_at`：前者用于“一项目一天一条有效凭证”的判重与前端日期展示，后者始终记录用户实际上传的时间。迁移历史数据时，使用 `DATE(created_at)` 回填本字段。
+
+同一 `season_user_id + project_id + proof_date` 最多保留一条 `status = 1` 的记录。用户再次提交该日期时，系统按重传处理，更新原记录并重新初审。
+
+---
+
 ### review_status
 
 审核状态。该字段使用一个 `VARCHAR(32)` 字段记录模型初审和管理员终审结果。
@@ -179,7 +196,7 @@ approved             = 终审通过
 rejected             = 终审失败
 ```
 
-用户上传凭证或当天重复上传后，默认状态为：
+用户上传凭证或同运动日期重复上传后，默认状态为：
 ```text
 pending
 ```
@@ -196,7 +213,7 @@ preliminary_rejected
 
 大模型初审给出的原始项目进度增量，取值范围为 `0.0000`～`1.0000`。
 
-初审通过时保存模型返回的 `progressDelta`，即使当前项目进度已经达到 `1.0000`，也保留该原始值。初审失败、待初审和月初减重基线记录的值为 `0.0000`。同日重传时，本字段随旧初审结果一起清零，等待新版本重新初审。
+初审通过时保存模型返回的 `progressDelta`，即使当前项目进度已经达到 `1.0000`，也保留该原始值。初审失败、待初审和月初减重基线记录的值为 `0.0000`。同运动日期重传时，本字段随旧初审结果一起清零，等待新版本重新初审。
 
 该字段为终审失败后的进度回补保留原始依据，不会因为进度条封顶而截断。对于迁移前已经存在的历史记录，旧系统没有保存被封顶前的原始值，迁移时保守使用原实际贡献进行回填。
 
@@ -219,7 +236,7 @@ increase = 0.1000
 
 当管理员终审拒绝一条凭证时，该凭证的 `increase` 归零。系统在同一事务中锁定对应的 `season_user_project`，按 `created_at ASC, id ASC` 查询同一用户、同一赛季、同一项目下仍有效且 `progress_delta > increase` 的通过凭证，将释放的进度依次回补到这些凭证的 `increase`，最后同步更新项目进度条。
 
-同日重传也会先撤销旧版本的 `increase`，再将原记录重置为待初审。项目进度应始终满足：
+同运动日期重传也会先撤销旧版本的 `increase`，再将原记录重置为待初审。项目进度应始终满足：
 
 ```text
 completion_progress = SUM(当前有效通过凭证的 increase)
@@ -272,8 +289,8 @@ completion_progress <= 1.0000
 用途包括：
 
 - 历史记录按上传时间倒序展示
-- 判断凭证是否属于当前赛季周期
-- 排行榜按当前赛季上传次数统计
+- 作为初审结果写回时的重传版本标识
+- 判断凭证是否已超过初审最小等待时间
 - 后台审核时查看凭证提交时间
 
 该字段由数据库默认写入当前时间。
@@ -289,6 +306,7 @@ CREATE TABLE proof_record (
   project_upload_config_id BIGINT UNSIGNED NOT NULL COMMENT '项目上传配置ID',
   image_url VARCHAR(500) NOT NULL COMMENT '上传图片路径',
   note VARCHAR(255) DEFAULT NULL COMMENT '用户备注',
+  proof_date DATE NOT NULL COMMENT '凭证对应的实际运动日期',
   review_status VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT '审核状态：pending待初审，preliminary_approved初审通过，preliminary_rejected初审失败，approved终审通过，rejected终审失败',
   review_comment VARCHAR(500) DEFAULT NULL COMMENT '审核评论，用于后台人员填写审核说明',
   progress_delta DECIMAL(5,4) NOT NULL DEFAULT 0.0000 COMMENT '大模型初审给出的原始项目进度增量',
@@ -301,6 +319,7 @@ CREATE TABLE proof_record (
   KEY idx_proof_record_project_upload_config_id (project_upload_config_id),
   KEY idx_proof_record_review_status (review_status),
   KEY idx_proof_record_status (status),
+  KEY idx_proof_record_season_project_proof_date_status (season_user_id, project_id, proof_date, status),
   KEY idx_proof_record_created_at (created_at),
   CONSTRAINT chk_proof_record_progress_delta
     CHECK (progress_delta >= 0 AND progress_delta <= 1),

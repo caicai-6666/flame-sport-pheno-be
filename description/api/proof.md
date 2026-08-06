@@ -102,6 +102,7 @@ Authorization: auth_code
     "reviewComment": "",
     "note": "力量训练 45 分钟，包含深蹲、卧推和拉伸。",
     "imageName": "健身.jpg",
+    "proofDate": "2026-07-19",
     "createdAt": "2026-07-19T15:30:00"
   }
 ]
@@ -117,6 +118,7 @@ Authorization: auth_code
 | reviewComment | string | 审核意见；初审任务后可返回通过依据或失败原因，未填写时返回空字符串 |
 | note | string | 用户上传备注，对应 `proof_record.note`；为空时返回空字符串 |
 | imageName | string | 凭证文件名，只保留 `{上传文件主名}.jpg`，不带系统生成前缀 |
+| proofDate | string | 凭证对应的实际运动日期，对应 `proof_record.proof_date`，格式 `YYYY-MM-DD` |
 | createdAt | string | 上传时间，对应 `proof_record.created_at` |
 
 数据来源：
@@ -133,6 +135,7 @@ proof_record.status = 1
 排序：
 
 ```text
+proof_record.proof_date DESC
 proof_record.created_at DESC
 proof_record.id DESC
 ```
@@ -158,6 +161,7 @@ Authorization: auth_code
     "reviewStatus": "approved",
     "reviewComment": "审核通过：健身凭证清晰，训练记录符合本项目打卡要求。",
     "imageName": "健身1.jpg",
+    "proofDate": "2026-06-01",
     "createdAt": "2026-06-01T09:00:00"
   }
 ]
@@ -172,6 +176,7 @@ Authorization: auth_code
 | reviewStatus | string | 审核状态，取值见下方“审核状态取值” |
 | reviewComment | string | 审核意见，对应 `proof_record.review_comment`；为空时返回空字符串 |
 | imageName | string | 凭证文件名，只保留 `{上传文件主名}.jpg`，不带系统生成前缀 |
+| proofDate | string | 凭证对应的实际运动日期，对应 `proof_record.proof_date`，格式 `YYYY-MM-DD` |
 | createdAt | string | 上传时间，对应 `proof_record.created_at` |
 
 数据来源：
@@ -188,6 +193,7 @@ proof_record.status = 1
 排序：
 
 ```text
+proof_record.proof_date DESC
 proof_record.created_at DESC
 proof_record.id DESC
 ```
@@ -214,6 +220,7 @@ Content-Type: multipart/form-data
 | project_id | number | 是 | 项目 ID，必须大于等于 1 |
 | project_upload_config_id | number | 是 | 上传配置 ID，必须大于等于 1 |
 | record_type | string | 否 | 兼容旧前端字段；传入时需和上传配置记录一致 |
+| proof_date | string | 是 | 凭证对应的实际运动日期，格式 `YYYY-MM-DD` |
 | note | string | 是 | 本次运动指标说明，供后续文本初审使用 |
 | image | File | 是 | JPG 图片 |
 
@@ -221,7 +228,8 @@ Content-Type: multipart/form-data
 
 ```json
 {
-  "created_at": "2026-07-19T15:30:00"
+  "created_at": "2026-07-19T15:30:00",
+  "proof_date": "2026-07-19"
 }
 ```
 
@@ -231,20 +239,23 @@ Content-Type: multipart/form-data
 - 当前用户必须锁定该项目，即存在有效 `season_user_project`。
 - `project_upload_config_id` 必须属于当前 `project_id` 且启用。
 - 如果传入 `record_type`，必须和上传配置中的 `record_type` 一致。
+- `proof_date` 必须在目标赛季内，且不能晚于服务器当天；普通上传页面默认提交当天，补传页面提交用户选择的过去日期。
 - `note` 必须填写非空内容，说明本次运动的可审核指标。
 - 上传文件必须是 JPG 且内容非空。
 
-当天重复上传规则：
+同运动日期重复上传规则：
 
 ```text
-season_user_id + project_id + project_upload_config_id + created_at 所在自然日 + status = 1
+season_user_id + project_id + proof_date + status = 1
 ```
 
-命中当天记录时覆盖：
+命中同项目同运动日期记录时覆盖：
 
 ```text
 image_url
 note
+project_upload_config_id
+proof_date
 created_at
 review_status = pending
 review_comment = NULL
@@ -252,7 +263,7 @@ review_comment = NULL
 
 重传后的 `pending` 表示待初审；此前的初审结果和审核意见会被清除。
 
-若当天同项目旧版本已初审通过，上传新版本时会先释放旧版本的实际进度贡献，并将空缺回补给同项目下尚未完全分配原始增量的其他有效通过凭证。重传记录的原始增量和实际贡献会清零；新版本初审通过后再从剩余进度空间中分配贡献。
+重传时会先释放旧版本的实际进度贡献，并将空缺回补给同项目下尚未完全分配原始增量的其他有效通过凭证。重传记录的原始增量和实际贡献会清零；新版本初审通过后再从剩余进度空间中分配贡献。
 
 ## 审核状态取值
 
@@ -273,8 +284,11 @@ review_comment = NULL
 | 400 | 上传配置和凭证类型不匹配 | `project_upload_config_id 与 record_type 不匹配` |
 | 400 | `note` 超过 255 字符 | `note 长度不能超过 255` |
 | 400 | `note` 为空或仅包含空白字符 | `note 不能为空，请填写本次运动指标` |
+| 400 | `proof_date` 晚于服务器当天 | `凭证日期不能晚于今天` |
+| 400 | `proof_date` 不在赛季日期范围 | `凭证日期必须在赛季期间内` |
 | 400 | 图片类型不是 JPG | `仅支持上传 JPG 图片` |
 | 400 | 上传图片为空 | `上传图片不能为空` |
 | 409 | 用户尚未正式参与赛季 | `用户尚未正式参与该赛季` |
 | 409 | 用户未锁定该项目 | `用户未锁定该项目` |
+| 404 | `season_id` 不存在 | `赛季不存在` |
 | 422 | 必填字段缺失或数字字段小于 1 | FastAPI 参数校验错误 |

@@ -16,7 +16,7 @@ rejected
 
 | 状态 | 说明 |
 | --- | --- |
-| `pending` | 待初审；用户上传或当天重传后的初始状态 |
+| `pending` | 待初审；用户上传或同运动日期重传后的初始状态 |
 | `preliminary_approved` | 初审通过；可计入当前赛季排行榜 |
 | `preliminary_rejected` | 初审失败；不计入排行榜，用户可重新上传 |
 | `approved` | 终审通过；保留其项目进度和排行榜资格 |
@@ -28,8 +28,8 @@ rejected
 
 ```text
 pending -> preliminary_approved -> approved / rejected
-pending -> preliminary_rejected -> 用户当天重新上传 -> pending
-preliminary_approved -> 用户当天重新上传 -> pending
+pending -> preliminary_rejected -> 用户同运动日期重新上传 -> pending
+preliminary_approved -> 用户同运动日期重新上传 -> pending
 ```
 
 ### 定时文本初审任务
@@ -48,7 +48,7 @@ proof_record.created_at <= 本轮扫描时间 - LLM_PRELIMINARY_REVIEW_MIN_AGE_S
 
 模型返回 `reviewComment`、`reviewStatus` 和 `progressDelta`。初审通过时，原始 `progressDelta` 保存到 `proof_record.progress_delta`，经过进度条上限分配后实际生效的部分保存到 `proof_record.increase`。普通项目在同一事务内累加 `season_user_project.completion_progress` 并封顶到 `1`；减重挑战月初通过时进度保持 `0`，月末通过时直接设为 `1`。模型异常、超时或返回非法 JSON 时保持 `pending`，下次任务会补审。用户在模型调用期间重传凭证时，旧结果不会覆盖新内容。
 
-同日重传的审核口径是“先撤销旧版本，再按新版本重算”：上传时若该项目当天已有初审通过记录，系统会锁定 `season_user_project` 行、扣回旧记录的 `increase`，并将释放的进度优先回补给同项目下更早上传且 `progress_delta > increase` 的有效通过凭证。不同上传配置下的旧通过记录会被软失效；同上传配置则原地重置为待审，同时清零 `progress_delta` 和 `increase`。新版本初审通过后再从剩余进度空间中分配新的贡献。
+同运动日期重传的审核口径是“先撤销旧版本，再按新版本重算”：上传时若该项目该日期已有有效记录，系统会锁定 `season_user_project` 行、扣回旧记录的 `increase`，并将释放的进度优先回补给同项目下更早上传且 `progress_delta > increase` 的有效通过凭证。旧记录原地重置为待审，同时清零 `progress_delta` 和 `increase`；无论旧记录此前是初审通过还是终审通过，都不会遗留旧进度。新版本初审通过后再从剩余进度空间中分配新的贡献。
 
 管理员终审拒绝凭证时，在同一事务中将该记录的 `increase` 归零，并把释放的进度按 `created_at ASC, id ASC` 回补给同一 `season_user_id + project_id` 下 `status = 1`、审核状态为 `preliminary_approved` 或 `approved` 且 `progress_delta > increase` 的其他凭证。回补完成后同步更新 `season_user_project.completion_progress`。终审操作必须使用状态条件保证幂等，避免重复拒绝造成多次回退。
 

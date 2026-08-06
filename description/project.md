@@ -51,9 +51,10 @@
 - 用户资料完整度检查和身高更新。
 - 当前赛季查询、参与状态和报名期限检查。
 - 运动项目、挑战规则、项目锁定、挑战等级锁定和已锁定项目完成进度查询。
-- 项目上传配置、JPG 凭证上传、当天重复上传和历史记录查询；定时文本初审会写入初审结论和审核意见，重传会先撤销旧版本进度再按新版本重算。
+- 项目上传配置、JPG 凭证上传与赛季内补传、按运动日期的一日一凭证和历史记录查询；定时文本初审会写入初审结论和审核意见，重传会先撤销旧版本进度再按新版本重算。
 - 当前赛季初审通过凭证的排行榜快照定时刷新和查询；减重挑战月末通过只计入一次。
 - 商品查询、积分流水查询和积分兑换。
+- 登录用户提交建议或反馈。
 - 头像、项目图标、商品图片和凭证图片的本地文件管理。
 
 ## 当前阶段限制
@@ -118,6 +119,7 @@ description/
 | 凭证上传与查询 | [`proof_upload.md`](business/proof_upload.md) | [`proof.md`](api/proof.md) | [`proof_record.md`](db/proof_record.md)、[`project_upload_config.md`](db/project_upload_config.md) | `app/routers/proof.py` |
 | 排行榜与积分结算 | [`review_and_points.md`](business/review_and_points.md) | [`leaderboard.md`](api/leaderboard.md) | [`leaderboard_snapshot.md`](db/leaderboard_snapshot.md)、[`point_record.md`](db/point_record.md) | `app/routers/leaderboard.py` |
 | 积分商城 | [`shop.md`](business/shop.md) | [`shop.md`](api/shop.md) | [`product.md`](db/product.md)、[`point_record.md`](db/point_record.md) | `app/routers/shop.py` |
+| 用户建议 | [`suggestion.md`](business/suggestion.md) | [`suggestion.md`](api/suggestion.md) | [`user_suggestion.md`](db/user_suggestion.md) | `app/routers/suggestion.py` |
 | 图片读取与存储 | [`assets.md`](dev/assets.md) | [`image.md`](api/image.md) | 各业务表中的图片字段 | `app/routers/image.py`、`app/core/storage.py` |
 
 ## 按任务阅读

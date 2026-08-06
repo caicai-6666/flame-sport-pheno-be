@@ -50,6 +50,19 @@ Compose 部署时，后端会使用 Docker 网络中的 `mysql:3306`；宿主机
 
 `SQLModel.metadata.create_all()` 不会为已有表补充字段。对已存在数据库，需要按已部署版本执行相应迁移。
 
+### 凭证实际运动日期
+
+部署补传凭证功能前，执行仓库中的
+[`20260806_add_proof_record_proof_date.sql`](../../scripts/migrations/20260806_add_proof_record_proof_date.sql)：
+
+```bash
+docker compose exec -T mysql sh -c \
+  'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' \
+  < flame-sport-pheno-be/scripts/migrations/20260806_add_proof_record_proof_date.sql
+```
+
+该脚本会新增 `proof_record.proof_date`，使用历史 `created_at` 的日期部分回填，并把旧逻辑可能遗留的同用户、同项目、同日期多条有效记录收敛为最新一条。脚本会根据保留的有效通过记录重新同步 `season_user_project.completion_progress`。迁移依赖 `increase` 字段，需先执行下方的“凭证原始进度与实际贡献”迁移。
+
 ### 凭证原始进度与实际贡献
 
 部署凭证每日终审进度回退与回补能力前，执行仓库中的
