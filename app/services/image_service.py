@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.repositories.proof_record_repository import proof_record_repository
 from app.repositories.user_repository import user_repository
 
 
@@ -62,6 +63,36 @@ class ImageService:
         self._ensure_project_icon_path_safe(icon_path)
         return icon_path
 
+    async def get_proof_record_image_path(
+        self,
+        proof_record_id: int,
+        user_id: str,
+        session: AsyncSession,
+    ) -> Path:
+        """返回当前用户本人有效凭证的本地图片路径。"""
+        proof_record_with_season = (
+            await proof_record_repository.get_active_user_record_with_season(
+                session=session,
+                proof_record_id=proof_record_id,
+                user_id=user_id,
+            )
+        )
+        if proof_record_with_season is None:
+            # 凭证读取按归属过滤，避免通过 ID 枚举其他用户的上传图片。
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="凭证不存在",
+            )
+
+        proof_record, season = proof_record_with_season
+        proof_image_path = (
+            settings.PROOF_RECORD_IMAGE_DIR
+            / str(season.id)
+            / proof_record.image_url
+        )
+        self._ensure_proof_record_path_safe(proof_image_path)
+        return proof_image_path
+
     def _ensure_avatar_path_safe(self, avatar_path: Path) -> None:
         """确保头像路径没有逃逸出头像存储目录。"""
         avatar_base_dir = settings.AVATAR_IMAGE_DIR.resolve()
@@ -90,6 +121,16 @@ class ImageService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="项目图标路径非法",
+            )
+
+    def _ensure_proof_record_path_safe(self, proof_image_path: Path) -> None:
+        """确保凭证图片路径没有逃逸出凭证资源目录。"""
+        proof_base_dir = settings.PROOF_RECORD_IMAGE_DIR.resolve()
+        resolved_proof_image_path = proof_image_path.resolve()
+        if not resolved_proof_image_path.is_relative_to(proof_base_dir):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="凭证图片路径非法",
             )
 
 

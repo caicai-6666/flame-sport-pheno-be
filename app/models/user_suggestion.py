@@ -20,7 +20,8 @@ class UserSuggestion(SQLModel, table=True):
     )
     user_id: str = Field(
         sa_column=Column(
-            String(64),
+            # 外键字符串列必须与已部署 user.id 的字符集和排序规则完全一致。
+            String(64, collation="utf8mb4_0900_ai_ci"),
             ForeignKey("user.id", name="fk_user_suggestion_user"),
             nullable=False,
         )

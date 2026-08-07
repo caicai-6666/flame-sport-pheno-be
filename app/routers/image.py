@@ -77,3 +77,27 @@ async def get_project_icon_image(
         or "application/octet-stream",
         headers={"Cache-Control": IMAGE_CACHE_CONTROL},
     )
+
+
+@router.get("/proof_record/{proof_record_id}")
+async def get_proof_record_image(
+    proof_record_id: int,
+    user_id: str = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_session),
+):
+    """校验归属后，返回当前用户的凭证图片。"""
+    image_path = await image_service.get_proof_record_image_path(
+        proof_record_id=proof_record_id,
+        user_id=user_id,
+        session=session,
+    )
+    if not image_path.is_file():
+        raise HTTPException(status_code=404, detail="凭证图片文件不存在")
+
+    return FileResponse(
+        path=image_path,
+        media_type=mimetypes.guess_type(image_path.name)[0]
+        or "application/octet-stream",
+        filename=image_path.name,
+        headers={"Cache-Control": IMAGE_CACHE_CONTROL},
+    )

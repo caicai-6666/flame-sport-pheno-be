@@ -14,6 +14,7 @@
 | GET | `/flame/api/image/avatar` | 是 | 获取当前用户头像图片 |
 | GET | `/flame/api/image/product` | 是 | 获取指定商品图片 |
 | GET | `/flame/api/image/project_icon` | 是 | 获取指定项目图标 |
+| GET | `/flame/api/image/proof_record/{proof_record_id}` | 是 | 获取当前用户自己的凭证图片 |
 
 ## 通用鉴权
 
@@ -131,3 +132,29 @@ Content-Type: image/png
 | 400 | 项目图标路径为空 | `项目图标路径不能为空` |
 | 400 | 项目图标路径非法 | `项目图标路径非法` |
 | 404 | 项目图标不存在 | `项目图标文件不存在` |
+
+## GET /flame/api/image/proof_record/{proof_record_id}
+
+请求示例：
+
+```http
+GET /flame/api/image/proof_record/18
+Authorization: auth_code
+```
+
+该接口仅用于读取 `GET /flame/api/proof/current` 和 `GET /flame/api/proof/history` 返回的 `imageUrl`。后端会按 `proof_record.id`、有效状态和当前登录用户归属查询凭证，再根据所属赛季定位图片文件；不会信任客户端传入的文件名或赛季目录。
+
+成功响应示例：
+
+```http
+Content-Type: image/jpeg
+```
+
+错误响应：
+
+| 状态码 | 场景 | detail |
+| --- | --- | --- |
+| 401 | 未登录或登录过期 | `登录状态无效或已过期，请重新登录` |
+| 404 | 凭证不存在、已失效或不属于当前用户 | `凭证不存在` |
+| 400 | 凭证图片路径非法 | `凭证图片路径非法` |
+| 404 | 凭证图片文件不存在 | `凭证图片文件不存在` |

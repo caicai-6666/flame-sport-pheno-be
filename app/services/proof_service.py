@@ -229,6 +229,9 @@ class ProofService:
                 "imageName": self._build_display_proof_image_name(
                     proof_record.image_url,
                 ),
+                "imageUrl": self._build_proof_record_image_url_for_response(
+                    proof_record.id,
+                ),
                 "proofDate": proof_record.proof_date.isoformat(),
                 "createdAt": proof_record.created_at.isoformat(timespec="seconds"),
             }
@@ -258,6 +261,9 @@ class ProofService:
                 "note": proof_record.note or "",
                 "imageName": self._build_display_proof_image_name(
                     proof_record.image_url,
+                ),
+                "imageUrl": self._build_proof_record_image_url_for_response(
+                    proof_record.id,
                 ),
                 "proofDate": proof_record.proof_date.isoformat(),
                 "createdAt": proof_record.created_at.isoformat(timespec="seconds"),
@@ -448,6 +454,15 @@ class ProofService:
         if len(filename_parts) < 4:
             return filename
         return filename_parts[3]
+
+    def _build_proof_record_image_url_for_response(
+        self,
+        proof_record_id: int | None,
+    ) -> str:
+        """构建列表项中的受保护凭证图片读取地址。"""
+        if proof_record_id is None:
+            return ""
+        return f"/flame/api/image/proof_record/{proof_record_id}"
 
     def _resolve_existing_proof_image_path(
         self,

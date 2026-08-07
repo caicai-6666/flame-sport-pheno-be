@@ -147,6 +147,7 @@ proof_record.status = 1
 ```
 
 返回给前端时，凭证文件名会去掉系统生成前缀，只保留用户上传文件主名。
+`current` 和 `history` 的每条记录还会返回 `imageUrl`，格式为 `/flame/api/image/proof_record/{proof_record_id}`；前端请求该地址时仍需携带登录态。图片接口会按凭证归属再次校验当前用户，不能仅通过递增 ID 读取其他用户的凭证。
 每条历史凭证会同时返回 `proofDate` 和 `reviewStatus`，便于前端展示实际运动日期、待初审、初审结论或终审结论。
 
 示例：

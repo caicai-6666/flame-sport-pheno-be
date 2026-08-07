@@ -102,6 +102,7 @@ Authorization: auth_code
     "reviewComment": "",
     "note": "力量训练 45 分钟，包含深蹲、卧推和拉伸。",
     "imageName": "健身.jpg",
+    "imageUrl": "/flame/api/image/proof_record/18",
     "proofDate": "2026-07-19",
     "createdAt": "2026-07-19T15:30:00"
   }
@@ -118,6 +119,7 @@ Authorization: auth_code
 | reviewComment | string | 审核意见；初审任务后可返回通过依据或失败原因，未填写时返回空字符串 |
 | note | string | 用户上传备注，对应 `proof_record.note`；为空时返回空字符串 |
 | imageName | string | 凭证文件名，只保留 `{上传文件主名}.jpg`，不带系统生成前缀 |
+| imageUrl | string | 当前用户可读取的凭证图片地址；请求时仍需携带 `Authorization` |
 | proofDate | string | 凭证对应的实际运动日期，对应 `proof_record.proof_date`，格式 `YYYY-MM-DD` |
 | createdAt | string | 上传时间，对应 `proof_record.created_at` |
 
@@ -161,6 +163,7 @@ Authorization: auth_code
     "reviewStatus": "approved",
     "reviewComment": "审核通过：健身凭证清晰，训练记录符合本项目打卡要求。",
     "imageName": "健身1.jpg",
+    "imageUrl": "/flame/api/image/proof_record/9",
     "proofDate": "2026-06-01",
     "createdAt": "2026-06-01T09:00:00"
   }
@@ -176,6 +179,7 @@ Authorization: auth_code
 | reviewStatus | string | 审核状态，取值见下方“审核状态取值” |
 | reviewComment | string | 审核意见，对应 `proof_record.review_comment`；为空时返回空字符串 |
 | imageName | string | 凭证文件名，只保留 `{上传文件主名}.jpg`，不带系统生成前缀 |
+| imageUrl | string | 当前用户可读取的凭证图片地址；请求时仍需携带 `Authorization` |
 | proofDate | string | 凭证对应的实际运动日期，对应 `proof_record.proof_date`，格式 `YYYY-MM-DD` |
 | createdAt | string | 上传时间，对应 `proof_record.created_at` |
 

@@ -328,5 +328,22 @@ class ProofRecordRepository:
         )
         return list(result.all())
 
+    async def get_active_user_record_with_season(
+        self,
+        session: AsyncSession,
+        proof_record_id: int,
+        user_id: str,
+    ) -> tuple[ProofRecord, Season] | None:
+        """查询当前用户可读取的有效凭证及其所属赛季。"""
+        result = await session.execute(
+            select(ProofRecord, Season)
+            .join(SeasonUser, SeasonUser.id == ProofRecord.season_user_id)
+            .join(Season, Season.id == SeasonUser.season_id)
+            .where(ProofRecord.id == proof_record_id)
+            .where(ProofRecord.status == 1)
+            .where(SeasonUser.user_id == user_id)
+        )
+        return result.one_or_none()
+
 
 proof_record_repository = ProofRecordRepository()
