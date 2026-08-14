@@ -103,7 +103,7 @@ docker compose down
 
 - MySQL 使用具名卷 `mysql_data`，后端资源使用具名卷 `backend_assets`；执行 `docker compose down` 不会删除这两个卷。
 - `mysql/init/001_flame_sport_pheno.sql` 会在空卷首次启动时由 MySQL 自动执行；已有卷不会再次执行该脚本。删除卷（`docker compose down -v`）后再次启动才会重新初始化。
-- `backend_assets` 挂载到后端容器的 `/app/assets`，保存商品图片、项目图标、头像和用户凭证。该卷与 Git 工作区隔离，频繁 `git pull`、切换分支或重新 clone 后端仓库不会影响已上传资源；请通过 Docker 卷备份流程备份它。
+- 后端镜像以 `/workspace` 作为项目根目录，Python 包位于 `/workspace/app`；`backend_assets` 挂载到与其平级的 `/workspace/assets`，保存商品图片、项目图标、头像和用户凭证。该卷与 Git 工作区隔离，频繁 `git pull`、切换分支或重新 clone 后端仓库不会影响已上传资源；请通过 Docker 卷备份流程备份它。
 - 后端启动时调用 `SQLModel.metadata.create_all()`，可为全新的 MySQL 卷创建缺失表；它不会迁移已有表结构，已有库仍需按 [`mysql_docker.md`](mysql_docker.md) 的迁移说明执行 SQL。
 
 ---

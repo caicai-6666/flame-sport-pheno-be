@@ -19,6 +19,7 @@ class GiftDistributionStatus(StrEnum):
 
     PENDING = "pending"
     DISTRIBUTED = "distributed"
+    REJECTED = "rejected"
 
 
 class PointRecord(SQLModel, table=True):
@@ -35,13 +36,13 @@ class PointRecord(SQLModel, table=True):
             "created_at",
         ),
         CheckConstraint(
-            "gift_distribution_status IN ('pending', 'distributed')",
+            "gift_distribution_status IN ('pending', 'distributed', 'rejected')",
             name="chk_point_record_gift_distribution_status",
         ),
         CheckConstraint(
-            "gift_distribution_status <> 'distributed' "
+            "gift_distribution_status = 'pending' "
             "OR (change_type = 'exchange' AND product_id IS NOT NULL)",
-            name="chk_point_record_distributed_exchange",
+            name="chk_point_record_gift_distribution_exchange",
         ),
         {
             "mysql_engine": "InnoDB",
@@ -73,7 +74,7 @@ class PointRecord(SQLModel, table=True):
             BIGINT(unsigned=True),
             ForeignKey("product.id", name="fk_point_record_product"),
             nullable=True,
-            comment="商品ID，仅商品兑换时有值",
+            comment="商品ID，商品兑换及其退款流水使用",
         ),
     )
     change_type: str = Field(
@@ -82,7 +83,7 @@ class PointRecord(SQLModel, table=True):
             nullable=False,
             comment=(
                 "积分变动类型：season_reward赛季奖励，exchange商品兑换，"
-                "manual_adjust后台调整"
+                "exchange_refund兑换退款，manual_adjust后台调整"
             ),
         )
     )
@@ -123,7 +124,10 @@ class PointRecord(SQLModel, table=True):
             String(16),
             nullable=False,
             server_default=text("'pending'"),
-            comment="礼品发放状态：pending待发放，distributed已发放",
+            comment=(
+                "礼品发放状态：pending待发放，distributed已发放，"
+                "rejected拒绝发放"
+            ),
         ),
     )
     created_at: datetime = Field(

@@ -11,7 +11,7 @@ assets/
     proof_record/
 ```
 
-本地直接运行时，资源位于后端仓库的 `assets/`。Docker Compose 部署时，该目录在容器内仍为 `/app/assets`，但实际由具名卷 `backend_assets` 持久化，以避免频繁拉取或重建后端工作区影响上传文件。
+本地直接运行时，资源位于后端仓库的 `assets/`。Docker Compose 部署时，后端项目根目录为 `/workspace`，资源目录位于与 Python 包 `/workspace/app` 平级的 `/workspace/assets`，并由具名卷 `backend_assets` 持久化，以避免频繁拉取或重建后端工作区影响上传文件。
 
 ---
 
@@ -45,7 +45,7 @@ python scripts/convert_avatar_images_to_webp.py \
   --backup-dir assets/backups/avatar_before_webp_YYYYMMDD
 ```
 
-文件转换完成后执行 `scripts/migrations/20260814_convert_user_avatar_urls_to_webp.sql`，同步更新 `user.avatar_url`。生产环境使用 Docker 具名卷时，应先暂停新用户初始化，对 `/app/assets/images/avatar` 执行转换，再运行数据库迁移。
+文件转换完成后执行 `scripts/migrations/20260814_convert_user_avatar_urls_to_webp.sql`，同步更新 `user.avatar_url`。生产环境使用 Docker 具名卷时，应先暂停新用户初始化，对 `/workspace/assets/images/avatar` 执行转换，再运行数据库迁移。
 
 读取时会去除前导斜杠，再拼接目录：
 
@@ -87,7 +87,7 @@ python scripts/convert_project_icons_to_webp.py \
   --backup-dir assets/backups/project_icon_before_webp_YYYYMMDD
 ```
 
-转换完成后执行 `scripts/migrations/20260814_convert_project_icon_urls_to_webp.sql`，同步更新 `project.icon_url`。生产环境使用 Docker 具名卷时，应先暂停项目图标写入，对 `/app/assets/images/project_icon` 执行转换，再运行数据库迁移。
+转换完成后执行 `scripts/migrations/20260814_convert_project_icon_urls_to_webp.sql`，同步更新 `project.icon_url`。生产环境使用 Docker 具名卷时，应先暂停项目图标写入，对 `/workspace/assets/images/project_icon` 执行转换，再运行数据库迁移。
 
 由于读取接口存在浏览器缓存，更换图标时应优先使用新的唯一文件名，避免同一 `icon_url` 覆盖后客户端继续显示旧图。
 
@@ -148,8 +148,8 @@ python scripts/convert_product_images_to_webp.py \
 ```bash
 docker cp scripts/convert_product_images_to_webp.py flame-sport-pheno-backend-1:/tmp/
 docker exec flame-sport-pheno-backend-1 python /tmp/convert_product_images_to_webp.py \
-  --source-dir /app/assets/images/product \
-  --backup-dir /app/assets/backups/product_before_webp_YYYYMMDD
+  --source-dir /workspace/assets/images/product \
+  --backup-dir /workspace/assets/backups/product_before_webp_YYYYMMDD
 ```
 
 ---
@@ -184,7 +184,7 @@ python scripts/convert_proof_record_images_to_webp.py \
   --backup-dir assets/backups/proof_record_before_webp_YYYYMMDD
 ```
 
-文件转换成功后，执行 `scripts/migrations/20260813_convert_proof_record_image_urls_to_webp.sql`，同步更新 `proof_record.image_url`。生产环境应先暂停凭证上传，再对 `/app/assets/images/proof_record` 所在具名卷执行相同转换，最后运行数据库迁移，避免文件名和数据库地址短暂不一致。
+文件转换成功后，执行 `scripts/migrations/20260813_convert_proof_record_image_urls_to_webp.sql`，同步更新 `proof_record.image_url`。生产环境应先暂停凭证上传，再对 `/workspace/assets/images/proof_record` 所在具名卷执行相同转换，最后运行数据库迁移，避免文件名和数据库地址短暂不一致。
 
 确认激活赛季时会自动创建对应的 `{season_id}` 子目录；上传时会再次检查，以支持资源目录被运维清理后的恢复。
 
