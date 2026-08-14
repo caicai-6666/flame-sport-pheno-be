@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from app.models.season import Season
+from app.models.season import Season, SeasonStatus
 
 
 class SeasonRepository:
@@ -16,7 +16,7 @@ class SeasonRepository:
         """查询当前激活的赛季。"""
         result = await session.execute(
             select(Season)
-            .where(Season.status == 1)
+            .where(Season.status == SeasonStatus.ACTIVE)
             .order_by(Season.start_date.desc())
             .limit(1)
         )

@@ -25,6 +25,35 @@ MySQL 的外部连接地址为 `127.0.0.1:3307`（远程机器使用部署主机
 
 若宿主机已有服务占用 `3307`，可先停止旧服务，或将顶层 `.env` 的 `MYSQL_PORT` 改为其他空闲端口（例如 `3308`）后再启动。
 
+## 管理端内部服务
+
+管理路由注册在现有 `main:app`，开发和部署均只需启动一个后端服务。管理端容器通过 Compose 服务名直接访问：
+
+```text
+http://backend:8000/flame/api/admin
+```
+
+关键限制：
+
+- 后端宿主机端口必须绑定回环地址，例如 `127.0.0.1:${BACKEND_PORT:-18000}:8000`，避免绕过 Nginx 直接访问。
+- 宿主机 Nginx 必须对 `/flame/api/admin` 及其子路径直接返回 `404`，并放在普通 `/flame/api/` 代理规则之前。
+- 管理端容器应通过 `http://backend:8000/flame/api/admin` 访问，不经过宿主机公网域名。
+- Docker 内网负责网络隔离，不替代管理员身份认证；真实管理数据接口上线前仍需增加预设密钥登录和短期管理会话。
+
+宿主机 Nginx 的拦截规则示例：
+
+```nginx
+location = /flame/api/admin {
+    return 404;
+}
+
+location ^~ /flame/api/admin/ {
+    return 404;
+}
+```
+
+---
+
 ## 首次配置与启动
 
 在上级目录执行：
@@ -35,6 +64,8 @@ MySQL 的外部连接地址为 `127.0.0.1:3307`（远程机器使用部署主机
 # VUE_APP_DINGTALK_CORP_ID 和 VUE_APP_DINGTALK_CLIENT_ID。
 docker compose up -d --build
 ```
+
+---
 
 ## 切换登录模式
 
@@ -66,12 +97,16 @@ docker compose logs -f frontend backend mysql
 docker compose down
 ```
 
+---
+
 ## 数据和资源持久化
 
 - MySQL 使用具名卷 `mysql_data`，后端资源使用具名卷 `backend_assets`；执行 `docker compose down` 不会删除这两个卷。
 - `mysql/init/001_flame_sport_pheno.sql` 会在空卷首次启动时由 MySQL 自动执行；已有卷不会再次执行该脚本。删除卷（`docker compose down -v`）后再次启动才会重新初始化。
 - `backend_assets` 挂载到后端容器的 `/app/assets`，保存商品图片、项目图标、头像和用户凭证。该卷与 Git 工作区隔离，频繁 `git pull`、切换分支或重新 clone 后端仓库不会影响已上传资源；请通过 Docker 卷备份流程备份它。
 - 后端启动时调用 `SQLModel.metadata.create_all()`，可为全新的 MySQL 卷创建缺失表；它不会迁移已有表结构，已有库仍需按 [`mysql_docker.md`](mysql_docker.md) 的迁移说明执行 SQL。
+
+---
 
 ## 备份与恢复示例
 

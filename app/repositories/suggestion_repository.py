@@ -10,7 +10,7 @@ class SuggestionRepository:
         user_id: str,
         content: str,
     ) -> UserSuggestion:
-        """创建一条默认可见的用户建议。"""
+        """创建一条默认可见、待处理的用户建议。"""
         suggestion = UserSuggestion(user_id=user_id, content=content)
         session.add(suggestion)
         await session.flush()

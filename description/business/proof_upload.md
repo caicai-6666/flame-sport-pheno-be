@@ -19,17 +19,22 @@ GET /flame/api/proof/history
 POST /flame/api/proof/upload
 ```
 
+---
+
 ## 上传配置读取
 
 `GET /flame/api/proof/config` 用于返回项目可用的上传凭证类型。上传配置属于低频变更数据，服务层会按 `project_id` 缓存 5 分钟，并在响应中返回短期浏览器私有缓存头。
 
 该缓存只用于读取上传窗口配置，`POST /flame/api/proof/upload` 在写入凭证前仍会查询当前启用的 `project_upload_config`，避免关键写库逻辑依赖过期缓存。
 
+---
+
 ## 前置条件
 
 上传凭证前必须满足：
 
 ```text
+season.status = 1
 season_user 存在
 season_user.level_id IS NOT NULL
 season_user_project.status = 1
@@ -37,6 +42,10 @@ project_upload_config.status = 1
 ```
 
 其中 `project_upload_config_id` 是当前凭证类型的关键外键，后端会校验它必须属于当前 `project_id`。
+
+如果请求中的赛季存在但已经隐藏或未激活，服务会立即拒绝本次上传。激活状态直接来自数据库，不依赖进程内赛季缓存。
+
+---
 
 ## 文件保存
 
@@ -49,12 +58,16 @@ assets/images/proof_record/{season_id}
 文件名规则：
 
 ```text
-{user_id}-{project_id}-{timestamp}-{上传文件主名}.jpg
+{user_id}-{project_id}-{timestamp}-{上传文件主名}.webp
 ```
 
 数据库 `proof_record.image_url` 当前只保存完整文件名。
 
+客户端可以提交 JPEG、PNG 或 WebP。后端不直接保存客户端字节，而是解码图片、修正 EXIF 方向，并按质量 82 统一重编码为 WebP；图片像素尺寸保持不变，带透明通道的源图继续保留透明效果。图片转换在线程池执行，避免 CPU 密集编码阻塞其他异步请求。
+
 读取到激活赛季时，服务会预先创建该赛季 ID 对应的凭证目录；上传时也会再次确保目录存在，避免目录被手动清理后造成写入失败。
+
+---
 
 ## 写库规则
 
@@ -83,6 +96,8 @@ season.start_date <= proof_date <= min(season.end_date, 今天)
 
 因此用户不能提前上传未来日期，也不能补传赛季外日期。`created_at` 始终保存实际上传时间，不会被补传日期覆盖。
 
+---
+
 ## 同运动日期重复上传
 
 重复判断维度：
@@ -107,6 +122,8 @@ review_comment = NULL
 
 重传前系统会先撤销旧记录的 `increase`，并将释放的进度按上传时间顺序回补给同项目下 `progress_delta > increase` 的其他有效通过凭证，再将重传内容的 `progress_delta` 和 `increase` 清零并置为 `pending`。后续定时初审通过时，系统保存新版本的模型原始增量，并从项目剩余空间中分配新的实际贡献。
 
+---
+
 ## 事务和文件清理
 
 接口先保存图片，再写数据库。
@@ -114,6 +131,8 @@ review_comment = NULL
 如果数据库写入失败，后端会删除本次新保存的图片，避免留下孤儿文件。
 
 如果同运动日期重复上传并更新成功，后端会尽量删除旧图片。
+
+---
 
 ## 历史凭证
 
@@ -133,13 +152,13 @@ proof_record.status = 1
 
 `GET /flame/api/proof/history` 基于当前登录用户 ID 查询过往赛季历史凭证，并排除当前激活赛季的上传记录。
 
-当前激活赛季 ID 由服务运行时缓存 `CurrentSeasonRuntime` 提供。缓存未初始化时，接口会先读取当前激活赛季并写入缓存。
+`current` 每次请求都会从数据库读取当前激活赛季。`history` 不依赖当前赛季，只返回 `season.status = 3` 的已结束赛季凭证；`status = 0` 的未开始赛季和 `status = 2` 的结算中赛季不会出现在客户端历史记录中。
 
 查询关系：
 
 ```text
 season_user.user_id = 当前登录用户 ID
-season_user.season_id != 当前激活赛季 ID
+season.status = 3
 proof_record.season_user_id = season_user.id
 season_user.season_id = season.id
 proof_record.project_id = project.id
@@ -153,8 +172,10 @@ proof_record.status = 1
 示例：
 
 ```text
-bb123456-3-20260606090020-健身.jpg -> 健身.jpg
+bb123456-3-20260606090020-健身.webp -> 健身.webp
 ```
+
+---
 
 ## 并发保护
 

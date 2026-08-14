@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from app.models.point_record import PointRecord
+from app.models.point_record import GiftDistributionStatus, PointRecord
 from app.models.product import Product
 
 
@@ -74,6 +74,8 @@ class ShopRepository:
             points_after=points_after,
             description=description,
             status=1,
+            # 兑换成功仅代表积分已扣减，礼品仍需由管理端完成发放。
+            gift_distribution_status=GiftDistributionStatus.PENDING.value,
         )
         session.add(point_record)
         await session.flush()

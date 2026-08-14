@@ -13,7 +13,7 @@ from app.models.project_upload_config import (
     ProjectUploadConfig,
 )
 from app.models.proof_record import ProofRecord, ProofReviewStatus
-from app.models.season import Season
+from app.models.season import Season, SeasonStatus
 from app.models.season_user import SeasonUser
 from app.models.user import User
 
@@ -286,16 +286,16 @@ class ProofRecordRepository:
         self,
         session: AsyncSession,
         user_id: str,
-        excluded_season_id: int,
     ) -> list[tuple[ProofRecord, Season, Project]]:
-        """查询用户过往赛季有效历史凭证，并附带赛季和项目信息。"""
+        """查询用户已结束赛季的有效历史凭证，并附带赛季和项目信息。"""
         result = await session.execute(
             select(ProofRecord, Season, Project)
             .join(SeasonUser, SeasonUser.id == ProofRecord.season_user_id)
             .join(Season, Season.id == SeasonUser.season_id)
             .join(Project, Project.id == ProofRecord.project_id)
             .where(SeasonUser.user_id == user_id)
-            .where(SeasonUser.season_id != excluded_season_id)
+            # 结算中的赛季尚未定稿，只有已结束赛季进入客户端历史。
+            .where(Season.status == SeasonStatus.ENDED)
             .where(ProofRecord.status == 1)
             .order_by(
                 ProofRecord.proof_date.desc(),
@@ -342,6 +342,27 @@ class ProofRecordRepository:
             .where(ProofRecord.id == proof_record_id)
             .where(ProofRecord.status == 1)
             .where(SeasonUser.user_id == user_id)
+            # 客户端只能读取进行中或已结束赛季的图片，结算中由管理端处理。
+            .where(
+                Season.status.in_(
+                    (SeasonStatus.ACTIVE, SeasonStatus.ENDED),
+                )
+            )
+        )
+        return result.one_or_none()
+
+    async def get_active_record_with_season(
+        self,
+        session: AsyncSession,
+        proof_record_id: int,
+    ) -> tuple[ProofRecord, Season] | None:
+        """查询管理端可读取的有效凭证及其所属赛季。"""
+        result = await session.execute(
+            select(ProofRecord, Season)
+            .join(SeasonUser, SeasonUser.id == ProofRecord.season_user_id)
+            .join(Season, Season.id == SeasonUser.season_id)
+            .where(ProofRecord.id == proof_record_id)
+            .where(ProofRecord.status == 1)
         )
         return result.one_or_none()
 

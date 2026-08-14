@@ -10,6 +10,8 @@ MySQL asyncmy
 Pydantic Settings
 ```
 
+---
+
 ## 依赖安装
 
 ```bash
@@ -21,6 +23,8 @@ pip install -r requirements.txt
 ```text
 python-multipart
 ```
+
+---
 
 ## 配置
 
@@ -47,6 +51,8 @@ mysql+asyncmy://flame:flame123456@127.0.0.1:3307/flame_sport_pheno?charset=utf8m
 ```
 
 可通过 `.env` 覆盖。
+
+---
 
 ## 登录模式
 
@@ -96,7 +102,7 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-v4-flash
 ```
 
-定时初审服务默认关闭。启用后，它按固定间隔筛查 `CurrentSeasonRuntime.season_id` 对应赛季中仍为 `pending` 的有效凭证；模型失败的记录保留待审，下一次定时任务自动补审：
+定时初审服务默认关闭。启用后，每轮任务先从数据库查询当前激活赛季，再筛查其中仍为 `pending` 的有效凭证；没有激活赛季时跳过本轮，模型失败的记录保留待审并在下一次任务中自动补审：
 
 ```text
 LLM_PRELIMINARY_REVIEW_ENABLED=true
@@ -119,13 +125,15 @@ python -m unittest discover -s tests -p 'test_llm_sport_evaluation.py' -v
 
 评测与生产服务使用同一套输入结构：项目名称、凭证类型、当前用户已选等级唯一对应的规则文本、规则备注和用户 `note`；减重挑战还会发送身高或月初审核摘要。不会发送凭证图片、用户 ID、赛季 ID、等级 ID、当前完成进度或其他等级规则。仓库中的减重样例均为虚构数据；手动调试时请勿将真实个人身高、体重等健康信息发送到第三方模型。控制台会打印每个样例的原始结构化输出，以及 DeepSeek 返回的 `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`，供人工比较提示词效果和缓存命中情况。
 
+---
+
 ## 启动
 
 ```bash
 uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-`../../app/main.py` 中的直接运行配置当前使用固定局域网地址；本地开发更建议使用上面的 uvicorn 命令。
+`app/main.py` 中的直接运行配置用于脚本启动；本地开发更建议使用上面的 Uvicorn 命令，以便明确控制监听地址和热更新参数。
 
 所有服务接口均以 `/flame/api` 为公共前缀。OpenAPI 文档、Redoc 和 OpenAPI JSON 分别为：
 
@@ -134,6 +142,8 @@ uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 /flame/api/redoc
 /flame/api/openapi.json
 ```
+
+---
 
 ## 启动初始化
 

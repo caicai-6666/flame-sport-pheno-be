@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 from app.core.config import settings
 from app.core.database import async_session_factory
-from app.core.runtime_env import CurrentSeasonRuntime
+from app.repositories.season_repository import season_repository
 from app.services.leaderboard_service import leaderboard_service
 from app.services.preliminary_review_service import preliminary_review_service
 
@@ -29,18 +29,17 @@ def _build_cutoff_at(now: datetime) -> datetime:
 
 
 async def _review_once() -> None:
-    season_id = CurrentSeasonRuntime.season_id
-    if season_id is None:
-        # 任务仅信任当前进程全局赛季 ID，不回扫数据库或过往赛季。
-        logger.warning("preliminary review skipped: current season runtime is empty")
-        return
-
     # 数据库 DATETIME 保存本地时间。最小等待时间留给用户重传，避免刚上传就被模型审核。
     cutoff_at = _build_cutoff_at(datetime.now())
     async with async_session_factory() as session:
+        season = await season_repository.get_current(session=session)
+        if season is None or season.id is None:
+            logger.info("preliminary review skipped: no active season")
+            return
+
         summary = await preliminary_review_service.review_pending_current_season(
             session=session,
-            season_id=season_id,
+            season_id=season.id,
             cutoff_at=cutoff_at,
         )
         if summary.updated_count:
@@ -49,7 +48,7 @@ async def _review_once() -> None:
 
     logger.info(
         "preliminary review finished: season_id=%s found=%s updated=%s failed=%s",
-        season_id,
+        season.id,
         summary.found_count,
         summary.updated_count,
         summary.failed_count,

@@ -4,6 +4,8 @@
 
 商城用于展示当前可兑换商品，并支持用户使用积分兑换商品。当前兑换只写入积分扣减流水，不处理库存、订单或独立兑换记录表。
 
+---
+
 ## 商品列表
 
 当前商品列表接口：
@@ -24,27 +26,31 @@ image_url
 
 该接口不返回真实图片文件。前端拿到 `image_url` 后，再请求 `/flame/api/image/product` 获取图片。
 
+---
+
 ## 商品图片
 
 商品图片统一放在：
 
 ```text
-assets/api/images/product
+assets/images/product
 ```
 
-数据库 `product.image_url` 可以保存文件名或相对路径。当前 mock 数据允许保存类似：
+数据库 `product.image_url` 可以保存文件名或相对路径。当前商品数据保存类似：
 
 ```text
-/Keep 弹力带-入门款.jpg
+/Keep 弹力带.webp
 ```
 
-图片读取时，后端会去掉前导 `/` 或 `\`，再拼接到商品图片目录，并校验路径没有逃逸出该目录。
+现有商品图片统一使用 WebP，以减小商城列表的图片传输体积，并保留原 PNG 图片的透明通道。图片读取时，后端会去掉前导 `/` 或 `\`，再拼接到商品图片目录，并校验路径没有逃逸出该目录。
 
 前端请求示例：
 
 ```text
 GET /flame/api/image/product?filename={encodeURIComponent(product.image_url)}
 ```
+
+---
 
 ## 积分流水
 
@@ -70,6 +76,8 @@ created_at
 非商品兑换流水的 `product_id` 为空，此时 `product_name` 返回空字符串。
 
 积分流水接口不在后端排序，前端可以基于 `created_at` 自行决定展示顺序。
+
+---
 
 ## 商品兑换
 
@@ -103,6 +111,7 @@ point_record.change_points = -product.points_required
 point_record.points_after = 当前积分余额 - product.points_required
 point_record.description = 兑换商品：{product.name}
 point_record.status = 1
+point_record.gift_distribution_status = pending
 ```
 
-当前阶段只完成积分扣减流水写入，不处理库存、订单或兑换记录表。
+`gift_distribution_status` 只记录兑换礼品是否已经发放，不影响本次积分扣减或 `points_after`。当前阶段只创建待发放流水，不处理库存、订单、独立兑换记录或管理端发放操作。

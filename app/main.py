@@ -23,6 +23,7 @@ from app.core.preliminary_review_scheduler import (
 )
 from app.core.storage import ensure_asset_directories
 from app.routers import (
+    admin,
     auth,
     health,
     image,
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    application.include_router(admin.router, prefix=API_PREFIX)
     application.include_router(auth.router, prefix=API_PREFIX)
     application.include_router(health.router, prefix=API_PREFIX)
     application.include_router(image.router, prefix=API_PREFIX)

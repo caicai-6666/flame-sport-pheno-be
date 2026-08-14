@@ -55,7 +55,8 @@ async def get_product_image(
 
     return FileResponse(
         path=image_path,
-        media_type="image/jpeg",
+        media_type=mimetypes.guess_type(image_path.name)[0]
+        or "application/octet-stream",
         filename=image_path.name,
         headers={"Cache-Control": IMAGE_CACHE_CONTROL},
     )

@@ -1,12 +1,14 @@
-# 项目概况与文档导航
+# 项目概况
 
-本文档是 `flame-sport-pheno-be` 的项目知识入口，供新开发者或新会话 agent 快速建立项目心智模型，并找到完成具体任务所需的业务、接口、数据库和开发文档。
+本文档负责说明 `flame-sport-pheno-be` 的业务流程、领域对象、代码分层和当前阶段限制。完整文档导航参见[项目文档地图](README.md)，文档新增与修改规范参见[项目文档撰写规范](document-style.md)。
 
 ## 项目定位
 
 本项目是企业运动赛季平台的后端服务。用户可以在活动赛季中选择运动项目和挑战等级、上传运动凭证、查看排行榜，并在赛季结算后使用积分兑换商品。
 
 项目当前处于开发和联调阶段，已经打通主要用户侧流程，部分后台管理和生产化能力尚未实现。
+
+---
 
 ## 核心业务流程
 
@@ -19,11 +21,14 @@
   -> 正式参与当前赛季
   -> 按已锁定项目上传运动凭证
   -> 后台任务生成排行榜快照
-  -> 赛季结束后审核并结算积分
+  -> 赛季进入结算中，完成审核和积分结算
+  -> 赛季标记已结束
   -> 用户使用全局积分兑换商品
 ```
 
 当前系统将“存在 `season_user` 且已经设置 `level_id`”视为用户正式参与赛季。只选择项目但没有选择挑战等级时，用户尚未完成参与流程。
+
+---
 
 ## 核心领域对象
 
@@ -31,7 +36,7 @@
 | --- | --- |
 | `department` | 企业部门主数据，用于关联用户和展示排行榜部门信息 |
 | `user` | 用户基础资料，不保存登录凭据和积分余额 |
-| `season` | 赛季周期、状态和必须选择的项目数量 |
+| `season` | 赛季周期、未开始至已结束的生命周期状态，以及必须选择的项目数量 |
 | `project` | 平台支持的运动项目 |
 | `project_level` | 可选择的挑战等级及奖励积分 |
 | `project_rule` | 某个运动项目在不同等级下的挑战规则 |
@@ -45,6 +50,8 @@
 
 `season_user` 是赛季业务的核心关联对象。它把用户和赛季连接起来，项目选择、凭证、排行榜和赛季结算都围绕它展开。
 
+---
+
 ## 当前已实现能力
 
 - 通过钉钉企业内部 H5 微应用 `auth_code` 登录、认证缓存和受保护接口依赖注入。
@@ -57,14 +64,18 @@
 - 登录用户提交建议或反馈。
 - 头像、项目图标、商品图片和凭证图片的本地文件管理。
 
+---
+
 ## 当前阶段限制
 
-- 钉钉企业内部应用凭证与 access token 使用进程内缓存，多实例部署时不会共享 token；认证、当前赛季和部分业务配置也不会共享状态。
+- 钉钉企业内部应用凭证与 access token 使用进程内缓存，多实例部署时不会共享 token；认证和部分业务配置也不会共享状态。
 - 钉钉返回的 `userId` 直接作为本地 `user.id`；首次登录会同步姓名、头像和一个所属部门，但后续不会自动持续同步人员资料。
 - 尚未实现审核人员后台、赛季结束统一审核和积分结算流程。
 - 商品兑换暂不处理库存、订单和独立兑换记录。
 - 图片保存在本地文件系统，尚未接入对象存储。
 - 当前仓库尚未建立完整的自动化测试和数据库迁移体系。
+
+---
 
 ## 代码编排
 
@@ -81,63 +92,25 @@ router -> service -> repository -> model
 | `app/repositories/` | SQL 查询、关联查询、行锁、写入和 `flush` |
 | `app/models/` | SQLModel 数据表映射 |
 | `app/core/` | 配置、数据库、认证、缓存、运行时状态、文件存储和后台任务 |
-| `../app/main.py` | FastAPI 应用创建、路由注册和应用生命周期 |
+| `app/main.py` | FastAPI 应用创建、路由注册和应用生命周期 |
 
 实现时应保持以下边界：
 
-- Router 保持轻量，不承载跨表业务规则。
-- Service 负责业务异常、事务提交与回滚，以及多个 Repository 的协作。
-- Repository 聚焦数据访问，不处理 HTTP 请求和响应。
-- Model 描述数据库结构，不承担业务流程。
-- 通用基础设施放入 `core`，不要复制到各业务模块。
+- `Router` 保持轻量，不承载跨表业务规则。
+- `Service` 负责业务异常、事务提交与回滚，以及多个 `Repository` 的协作。
+- `Repository` 聚焦数据访问，不处理 HTTP 请求和响应。
+- `Model` 描述数据库结构，不承担业务流程。
+- 通用基础设施放入 `app/core/`，不要复制到各业务模块。
 
-## 文档目录
+---
 
-```text
-description/
-  project.md   项目概况、核心逻辑和文档导航
-  db/          数据库表设计文档
-  business/    跨接口业务流程和状态规则
-  api/         HTTP 接口契约
-  dev/         本地运行、资源、测试数据和维护说明
-```
+## 文档入口
 
-各类文档回答的问题不同：
+文档分类、业务主题映射和推荐阅读顺序统一维护在[项目文档地图](README.md)。本文档不重复维护具体文件清单，避免导航信息分散后失效。
 
-- `db/`：表为什么存在、字段含义、约束和建表设计。
-- `business/`：为什么这样校验、状态如何流转、哪些规则跨接口共享。
-- `api/`：接口如何调用、参数和响应结构、鉴权要求及错误码。
-- `dev/`：如何运行、准备环境和资源，以及如何维护项目。
+新增或修改 Markdown 文档前，应阅读[项目文档撰写规范](document-style.md)；功能变更需要同步哪些文档，以[文档维护说明](dev/documentation.md)为准。
 
-## 按业务主题阅读
-
-| 开发主题 | 业务文档 | API 文档 | 主要数据库文档 | 代码入口 |
-| --- | --- | --- | --- | --- |
-| 登录与鉴权 | [`authentication.md`](business/authentication.md) | [`auth.md`](api/auth.md) | [`user.md`](db/user.md) | `app/routers/auth.py` |
-| 用户资料 | [`user_profile.md`](business/user_profile.md) | [`user.md`](api/user.md) | [`user.md`](db/user.md) | `app/routers/user.py` |
-| 赛季与项目选择 | [`season_project_flow.md`](business/season_project_flow.md) | [`season.md`](api/season.md)、[`project.md`](api/project.md) | [`season.md`](db/season.md)、[`season_user.md`](db/season_user.md)、[`season_user_project.md`](db/season_user_project.md) | `app/routers/season.py`、`app/routers/project.py` |
-| 凭证上传与查询 | [`proof_upload.md`](business/proof_upload.md) | [`proof.md`](api/proof.md) | [`proof_record.md`](db/proof_record.md)、[`project_upload_config.md`](db/project_upload_config.md) | `app/routers/proof.py` |
-| 排行榜与积分结算 | [`review_and_points.md`](business/review_and_points.md) | [`leaderboard.md`](api/leaderboard.md) | [`leaderboard_snapshot.md`](db/leaderboard_snapshot.md)、[`point_record.md`](db/point_record.md) | `app/routers/leaderboard.py` |
-| 积分商城 | [`shop.md`](business/shop.md) | [`shop.md`](api/shop.md) | [`product.md`](db/product.md)、[`point_record.md`](db/point_record.md) | `app/routers/shop.py` |
-| 用户建议 | [`suggestion.md`](business/suggestion.md) | [`suggestion.md`](api/suggestion.md) | [`user_suggestion.md`](db/user_suggestion.md) | `app/routers/suggestion.py` |
-| 图片读取与存储 | [`assets.md`](dev/assets.md) | [`image.md`](api/image.md) | 各业务表中的图片字段 | `app/routers/image.py`、`app/core/storage.py` |
-
-## 按任务阅读
-
-开发或修改接口时，建议依次阅读：
-
-1. 本文档，确认功能位于哪条业务链路。
-2. `db/` 中涉及的表设计，理解现有数据边界。
-3. `business/` 中对应流程，理解前置条件和状态变化。
-4. `api/` 中对应接口契约，确认请求、响应和错误语义。
-5. 对应 Router，再沿 `service -> repository -> model` 阅读实现。
-6. `dev/` 中与运行、资源或测试数据相关的说明。
-
-排查线上或联调问题时，可以反向阅读：
-
-```text
-API 契约 -> Router -> Service -> Repository -> Model/DB 文档 -> 业务规则
-```
+---
 
 ## 开发与文档维护规则
 

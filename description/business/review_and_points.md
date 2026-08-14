@@ -34,11 +34,11 @@ preliminary_approved -> 用户同运动日期重新上传 -> pending
 
 ### 定时文本初审任务
 
-任务只读取 `CurrentSeasonRuntime.season_id` 对应赛季的有效待审凭证，不扫描过往赛季：
+任务每轮开始时从数据库查询 `status = 1` 的当前激活赛季，只读取该赛季的有效待审凭证，不扫描结算中或已结束赛季。没有激活赛季时跳过本轮任务：
 
 ```text
 proof_record.season_user_id -> season_user.id
-season_user.season_id = CurrentSeasonRuntime.season_id
+season_user.season_id = 当前数据库激活赛季 ID
 proof_record.status = 1
 proof_record.review_status = pending
 proof_record.created_at <= 本轮扫描时间 - LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS
@@ -59,6 +59,8 @@ proof_record.created_at <= 本轮扫描时间 - LLM_PRELIMINARY_REVIEW_MIN_AGE_S
 初审系统提示词内置步数、跑步、健身、公司运动、登山和减重挑战的固定 few-shot，用于解释“累计目标 + 单次门槛”的通用语义。它们不替代运行时从 `project_rule` 查询到的规则；每次请求仍只传入当前用户、当前项目和已选等级对应的唯一 `ruleContent`。
 
 任务按 `LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS` 固定间隔执行，默认每 15 分钟筛查一次；仅审核已上传至少 `LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS`（默认 5 分钟）的待审凭证，为用户重传留出窗口。本批次有结果写入后立即刷新排行榜快照。
+
+---
 
 ## 排行榜
 
@@ -128,9 +130,11 @@ record_type = 月末记录：同一 season_user + project 最多计 1 次
 
 最近一次刷新完成时间保存在进程内 `LeaderboardRuntime.calculated_at`，不写入数据库。
 
+---
+
 ## 积分结算
 
-当前积分不是实时发放。管理员在赛季期间持续终审凭证，系统在赛季结束后根据终审结果统一结算积分。
+当前积分不是实时发放。赛季离开进行中状态后应先进入 `status = 2` 结算中，用于完成终审、进度校正和积分结算；所有结算工作完成后再切换为 `status = 3` 已结束。
 
 结算结果写入：
 
@@ -145,6 +149,8 @@ point_record
 ```
 
 赛季内项目完成进度保存在 `season_user_project.completion_progress`。定时初审通过后会在同一事务中更新该字段；终审和积分结算可将项目进度是否达到 `1` 作为辅助判断依据。
+
+---
 
 ## 尚未实现的能力
 

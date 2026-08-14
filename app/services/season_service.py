@@ -4,8 +4,8 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.runtime_env import CurrentSeasonRuntime
 from app.core.storage import ensure_proof_record_season_directory
+from app.models.season import SeasonStatus
 from app.repositories.season_repository import season_repository
 from app.repositories.season_user_repository import season_user_repository
 
@@ -22,16 +22,12 @@ class SeasonService:
 
         # 当前赛季确认后提前准备凭证目录，避免首次上传因目录缺失失败。
         ensure_proof_record_season_directory(season.id or 0)
-        await self._load_current_season_runtime_if_needed(
-            season_id=season.id or 0,
-            required_project_count=season.required_project_count,
-        )
         return {
             "season_id": season.id or 0,
             "name": season.name,
             "start_date": season.start_date.isoformat(),
             "end_date": season.end_date.isoformat(),
-            "required_project_count": CurrentSeasonRuntime.required_project_count or 0,
+            "required_project_count": season.required_project_count,
         }
 
     async def check_season_participation(
@@ -45,10 +41,10 @@ class SeasonService:
             session=session,
             season_id=season_id,
         )
-        if season is None:
+        if season is None or season.status != SeasonStatus.ACTIVE:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="赛季不存在",
+                detail="赛季不存在或未激活",
             )
 
         season_user = await season_user_repository.get_by_season_id_and_user_id(
@@ -80,20 +76,6 @@ class SeasonService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="已超过赛季报名时间",
             )
-
-    async def _load_current_season_runtime_if_needed(
-        self,
-        season_id: int,
-        required_project_count: int,
-    ) -> None:
-        """当前赛季运行时缓存未初始化时，写入当前激活赛季配置。"""
-        if CurrentSeasonRuntime.is_initialized():
-            return
-
-        CurrentSeasonRuntime.set(
-            season_id=season_id,
-            required_project_count=required_project_count,
-        )
 
 
 season_service = SeasonService()

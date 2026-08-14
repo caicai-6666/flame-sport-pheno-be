@@ -2,13 +2,15 @@
 
 ## 接口概览
 
+当前路由提供以下接口。
+
 | 方法 | 路径 | 是否鉴权 | 说明 |
 | --- | --- | ---: | --- |
-| GET | `/flame/api/leaderboard/info` | 是 | 获取当前赛季排行榜基础信息 |
+| `GET` | `/flame/api/leaderboard/info` | 是 | 获取当前赛季排行榜基础信息 |
 
 ---
 
-## GET /flame/api/leaderboard/info
+## GET `/flame/api/leaderboard/info`
 
 请求示例：
 
@@ -42,11 +44,11 @@ Authorization: auth_code
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| name | string | 用户名称 |
-| department_name | string | 用户所属部门名称 |
-| project_rule_level_id | number | 用户当前赛季选择的挑战等级 ID |
-| checkin_count | number | 当前赛季累计初审通过的有效打卡次数；减重月初不计数，月末同项目最多计一次 |
-| is_current_user | boolean | 是否为当前登录用户所在记录 |
+| `name` | `string` | 用户名称 |
+| `department_name` | `string` | 用户所属部门名称 |
+| `project_rule_level_id` | `number` | 用户当前赛季选择的挑战等级 ID |
+| `checkin_count` | `number` | 当前赛季累计初审通过的有效打卡次数；减重月初不计数，月末同项目最多计一次 |
+| `is_current_user` | `boolean` | 是否为当前登录用户所在记录 |
 
 数据来源：
 
@@ -56,6 +58,8 @@ season_user.user_id = user.id
 user.department_id = department.id
 season_user.season_id = 当前激活赛季 ID
 ```
+
+接口每次请求都从数据库查询当前激活赛季，不使用进程内赛季缓存；没有激活赛季时返回 `404` 和 `当前没有激活的赛季`。`status = 2` 的结算中赛季不属于当前赛季，不会由该接口返回。
 
 该接口直接读取 `leaderboard_snapshot` 快照表，不实时统计 `proof_record`，也不在后端排序。前端可以基于 `checkin_count` 自行决定展示顺序。
 

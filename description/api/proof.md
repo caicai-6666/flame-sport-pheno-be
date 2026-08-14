@@ -1,4 +1,4 @@
-# proof 接口文档
+# 凭证接口
 
 ## 路由前缀
 
@@ -6,17 +6,23 @@
 /flame/api/proof
 ```
 
+---
+
 ## 接口列表
+
+当前路由提供以下接口。
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/flame/api/proof` | 否 | 凭证子路由存活校验 |
-| GET | `/flame/api/proof/config` | 是 | 获取项目上传凭证配置 |
-| GET | `/flame/api/proof/current` | 是 | 获取当前用户当前赛季凭证 |
-| GET | `/flame/api/proof/history` | 是 | 获取当前用户过往赛季历史凭证 |
-| POST | `/flame/api/proof/upload` | 是 | 上传或更新项目凭证 |
+| `GET` | `/flame/api/proof` | 否 | 凭证子路由存活校验 |
+| `GET` | `/flame/api/proof/config` | 是 | 获取项目上传凭证配置 |
+| `GET` | `/flame/api/proof/current` | 是 | 获取当前用户当前赛季凭证 |
+| `GET` | `/flame/api/proof/history` | 是 | 获取当前用户过往赛季历史凭证 |
+| `POST` | `/flame/api/proof/upload` | 是 | 上传或更新项目凭证 |
 
-## GET /flame/api/proof
+---
+
+## GET `/flame/api/proof`
 
 成功响应：
 
@@ -26,7 +32,9 @@
 }
 ```
 
-## GET /flame/api/proof/config
+---
+
+## GET `/flame/api/proof/config`
 
 请求示例：
 
@@ -39,7 +47,7 @@ Query 参数：
 
 | 字段 | 类型 | 是否必填 | 说明 |
 | --- | --- | ---: | --- |
-| project_id | number | 是 | 项目 ID，必须大于等于 1 |
+| `project_id` | `number` | 是 | 项目 ID，必须大于等于 1 |
 
 成功响应：
 
@@ -80,9 +88,11 @@ Cache-Control: private, max-age=300
 
 后端会按 `project_id` 对上传配置做 5 分钟进程内缓存。上传配置属于低频变更数据，该缓存用于减少上传凭证窗口重复打开时的数据库查询；缓存过期后会重新读取 `project_upload_config`。
 
-## GET /flame/api/proof/current
+---
 
-该接口只返回当前激活赛季的凭证。当前激活赛季 ID 来自服务内的 `CurrentSeasonRuntime`；如果运行时缓存未初始化，接口会先从当前激活赛季加载。
+## GET `/flame/api/proof/current`
+
+该接口每次请求都从数据库查询当前激活赛季，并只返回该赛季的凭证。没有激活赛季时返回 `404`。
 
 请求示例：
 
@@ -101,7 +111,7 @@ Authorization: auth_code
     "reviewStatus": "pending",
     "reviewComment": "",
     "note": "力量训练 45 分钟，包含深蹲、卧推和拉伸。",
-    "imageName": "健身.jpg",
+    "imageName": "健身.webp",
     "imageUrl": "/flame/api/image/proof_record/18",
     "proofDate": "2026-07-19",
     "createdAt": "2026-07-19T15:30:00"
@@ -113,15 +123,15 @@ Authorization: auth_code
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| seasonName | string | 赛季名称，对应 `season.name` |
-| projectName | string | 项目名称，对应 `project.name` |
-| reviewStatus | string | 审核状态，取值见下方“审核状态取值” |
-| reviewComment | string | 审核意见；初审任务后可返回通过依据或失败原因，未填写时返回空字符串 |
-| note | string | 用户上传备注，对应 `proof_record.note`；为空时返回空字符串 |
-| imageName | string | 凭证文件名，只保留 `{上传文件主名}.jpg`，不带系统生成前缀 |
-| imageUrl | string | 当前用户可读取的凭证图片地址；请求时仍需携带 `Authorization` |
-| proofDate | string | 凭证对应的实际运动日期，对应 `proof_record.proof_date`，格式 `YYYY-MM-DD` |
-| createdAt | string | 上传时间，对应 `proof_record.created_at` |
+| `seasonName` | `string` | 赛季名称，对应 `season.name` |
+| `projectName` | `string` | 项目名称，对应 `project.name` |
+| `reviewStatus` | `string` | 审核状态，取值见下方“审核状态取值” |
+| `reviewComment` | `string` | 审核意见；初审任务后可返回通过依据或失败原因，未填写时返回空字符串 |
+| `note` | `string` | 用户上传备注，对应 `proof_record.note`；为空时返回空字符串 |
+| `imageName` | `string` | 凭证文件名，只保留 `{上传文件主名}.webp`，不带系统生成前缀 |
+| `imageUrl` | `string` | 当前用户可读取的凭证图片地址；请求时仍需携带 `Authorization` |
+| `proofDate` | `string` | 凭证对应的实际运动日期，对应 `proof_record.proof_date`，格式 `YYYY-MM-DD` |
+| `createdAt` | `string` | 上传时间，对应 `proof_record.created_at` |
 
 数据来源：
 
@@ -142,9 +152,11 @@ proof_record.created_at DESC
 proof_record.id DESC
 ```
 
-## GET /flame/api/proof/history
+---
 
-该接口只返回过往赛季凭证，会排除当前激活赛季的上传记录。当前激活赛季 ID 来自服务内的 `CurrentSeasonRuntime`；如果运行时缓存未初始化，接口会先从当前激活赛季加载。
+## GET `/flame/api/proof/history`
+
+该接口不依赖当前激活赛季，只返回 `season.status = 3` 的已结束赛季凭证。`status = 0` 的未开始赛季和 `status = 2` 的结算中赛季不会出现在客户端历史记录中，因此只有结算完成并切换为已结束的赛季才会对客户端展示。
 
 请求示例：
 
@@ -162,7 +174,7 @@ Authorization: auth_code
     "projectName": "健身",
     "reviewStatus": "approved",
     "reviewComment": "审核通过：健身凭证清晰，训练记录符合本项目打卡要求。",
-    "imageName": "健身1.jpg",
+    "imageName": "健身1.webp",
     "imageUrl": "/flame/api/image/proof_record/9",
     "proofDate": "2026-06-01",
     "createdAt": "2026-06-01T09:00:00"
@@ -174,20 +186,20 @@ Authorization: auth_code
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| seasonName | string | 赛季名称，对应 `season.name` |
-| projectName | string | 项目名称，对应 `project.name` |
-| reviewStatus | string | 审核状态，取值见下方“审核状态取值” |
-| reviewComment | string | 审核意见，对应 `proof_record.review_comment`；为空时返回空字符串 |
-| imageName | string | 凭证文件名，只保留 `{上传文件主名}.jpg`，不带系统生成前缀 |
-| imageUrl | string | 当前用户可读取的凭证图片地址；请求时仍需携带 `Authorization` |
-| proofDate | string | 凭证对应的实际运动日期，对应 `proof_record.proof_date`，格式 `YYYY-MM-DD` |
-| createdAt | string | 上传时间，对应 `proof_record.created_at` |
+| `seasonName` | `string` | 赛季名称，对应 `season.name` |
+| `projectName` | `string` | 项目名称，对应 `project.name` |
+| `reviewStatus` | `string` | 审核状态，取值见下方“审核状态取值” |
+| `reviewComment` | `string` | 审核意见，对应 `proof_record.review_comment`；为空时返回空字符串 |
+| `imageName` | `string` | 凭证文件名，只保留 `{上传文件主名}.webp`，不带系统生成前缀 |
+| `imageUrl` | `string` | 当前用户可读取的凭证图片地址；请求时仍需携带 `Authorization` |
+| `proofDate` | `string` | 凭证对应的实际运动日期，对应 `proof_record.proof_date`，格式 `YYYY-MM-DD` |
+| `createdAt` | `string` | 上传时间，对应 `proof_record.created_at` |
 
 数据来源：
 
 ```text
 season_user.user_id = 当前登录用户 ID
-season_user.season_id != 当前激活赛季 ID
+season.status = 3
 proof_record.season_user_id = season_user.id
 proof_record.project_id = project.id
 season_user.season_id = season.id
@@ -205,10 +217,12 @@ proof_record.id DESC
 文件名处理规则：
 
 ```text
-bb123456-3-20260606090020-健身.jpg -> 健身.jpg
+bb123456-3-20260606090020-健身.webp -> 健身.webp
 ```
 
-## POST /flame/api/proof/upload
+---
+
+## POST `/flame/api/proof/upload`
 
 请求类型：
 
@@ -220,13 +234,13 @@ Content-Type: multipart/form-data
 
 | 字段 | 类型 | 是否必填 | 说明 |
 | --- | --- | ---: | --- |
-| season_id | number | 是 | 赛季 ID，必须大于等于 1 |
-| project_id | number | 是 | 项目 ID，必须大于等于 1 |
-| project_upload_config_id | number | 是 | 上传配置 ID，必须大于等于 1 |
-| record_type | string | 否 | 兼容旧前端字段；传入时需和上传配置记录一致 |
-| proof_date | string | 是 | 凭证对应的实际运动日期，格式 `YYYY-MM-DD` |
-| note | string | 是 | 本次运动指标说明，供后续文本初审使用 |
-| image | File | 是 | JPG 图片 |
+| `season_id` | `number` | 是 | 赛季 ID，必须大于等于 1 |
+| `project_id` | `number` | 是 | 项目 ID，必须大于等于 1 |
+| `project_upload_config_id` | `number` | 是 | 上传配置 ID，必须大于等于 1 |
+| `record_type` | `string` | 否 | 兼容旧前端字段；传入时需和上传配置记录一致 |
+| `proof_date` | `string` | 是 | 凭证对应的实际运动日期，格式 `YYYY-MM-DD` |
+| `note` | `string` | 是 | 本次运动指标说明，供后续文本初审使用 |
+| `image` | `File` | 是 | JPEG、PNG 或 WebP 图片；服务端统一存储为 WebP |
 
 成功响应：
 
@@ -239,13 +253,16 @@ Content-Type: multipart/form-data
 
 主要校验：
 
+- 目标赛季必须处于激活状态，即 `season.status = 1`。
 - 当前用户必须正式参与赛季，即 `season_user.level_id IS NOT NULL`。
 - 当前用户必须锁定该项目，即存在有效 `season_user_project`。
 - `project_upload_config_id` 必须属于当前 `project_id` 且启用。
 - 如果传入 `record_type`，必须和上传配置中的 `record_type` 一致。
 - `proof_date` 必须在目标赛季内，且不能晚于服务器当天；普通上传页面默认提交当天，补传页面提交用户选择的过去日期。
 - `note` 必须填写非空内容，说明本次运动的可审核指标。
-- 上传文件必须是 JPG 且内容非空。
+- 上传文件必须是可解码的 JPEG、PNG 或 WebP 且内容非空；服务端修正 EXIF 方向后，以质量 82 重编码并存储为 WebP。
+
+如果前端提交已经隐藏或未激活的旧赛季 ID，接口会根据数据库中的实时状态拒绝上传，不会写入图片或凭证记录。
 
 同运动日期重复上传规则：
 
@@ -269,6 +286,8 @@ review_comment = NULL
 
 重传时会先释放旧版本的实际进度贡献，并将空缺回补给同项目下尚未完全分配原始增量的其他有效通过凭证。重传记录的原始增量和实际贡献会清零；新版本初审通过后再从剩余进度空间中分配贡献。
 
+---
+
 ## 审核状态取值
 
 | 值 | 含义 |
@@ -290,9 +309,11 @@ review_comment = NULL
 | 400 | `note` 为空或仅包含空白字符 | `note 不能为空，请填写本次运动指标` |
 | 400 | `proof_date` 晚于服务器当天 | `凭证日期不能晚于今天` |
 | 400 | `proof_date` 不在赛季日期范围 | `凭证日期必须在赛季期间内` |
-| 400 | 图片类型不是 JPG | `仅支持上传 JPG 图片` |
+| 400 | 图片媒体类型不受支持 | `凭证图片仅支持 JPEG、PNG 或 WebP` |
+| 400 | 图片内容无法解码或实际格式不受支持 | `上传内容不是有效的凭证图片` 或对应格式提示 |
 | 400 | 上传图片为空 | `上传图片不能为空` |
 | 409 | 用户尚未正式参与赛季 | `用户尚未正式参与该赛季` |
 | 409 | 用户未锁定该项目 | `用户未锁定该项目` |
+| 409 | 目标赛季未激活 | `赛季未激活，无法上传凭证` |
 | 404 | `season_id` 不存在 | `赛季不存在` |
 | 422 | 必填字段缺失或数字字段小于 1 | FastAPI 参数校验错误 |

@@ -1,4 +1,4 @@
-# image 接口文档
+# 图片接口
 
 ## 路由前缀
 
@@ -6,15 +6,21 @@
 /flame/api/image
 ```
 
+---
+
 ## 接口列表
+
+当前路由提供以下接口。
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/flame/api/image` | 否 | 图片子路由存活校验 |
-| GET | `/flame/api/image/avatar` | 是 | 获取当前用户头像图片 |
-| GET | `/flame/api/image/product` | 是 | 获取指定商品图片 |
-| GET | `/flame/api/image/project_icon` | 是 | 获取指定项目图标 |
-| GET | `/flame/api/image/proof_record/{proof_record_id}` | 是 | 获取当前用户自己的凭证图片 |
+| `GET` | `/flame/api/image` | 否 | 图片子路由存活校验 |
+| `GET` | `/flame/api/image/avatar` | 是 | 获取当前用户头像图片 |
+| `GET` | `/flame/api/image/product` | 是 | 获取指定商品图片 |
+| `GET` | `/flame/api/image/project_icon` | 是 | 获取指定项目图标 |
+| `GET` | `/flame/api/image/proof_record/{proof_record_id}` | 是 | 获取当前用户自己的凭证图片 |
+
+---
 
 ## 通用鉴权
 
@@ -23,6 +29,8 @@
 ```http
 Authorization: auth_code
 ```
+
+---
 
 ## 图片缓存
 
@@ -34,7 +42,9 @@ Cache-Control: private, max-age={IMAGE_CACHE_MAX_AGE_SECONDS}
 
 默认值为 `604800`（7 天）。图片接口需要登录态，因此缓存限定为当前浏览器私有缓存，代理和 CDN 等共享缓存不得复用响应。
 
-## GET /flame/api/image
+---
+
+## GET `/flame/api/image`
 
 成功响应：
 
@@ -44,7 +54,9 @@ Cache-Control: private, max-age={IMAGE_CACHE_MAX_AGE_SECONDS}
 }
 ```
 
-## GET /flame/api/image/avatar
+---
+
+## GET `/flame/api/image/avatar`
 
 处理流程：
 
@@ -57,8 +69,10 @@ Cache-Control: private, max-age={IMAGE_CACHE_MAX_AGE_SECONDS}
 成功响应：
 
 ```http
-Content-Type: image/jpeg
+Content-Type: image/webp
 ```
+
+用户头像统一返回 `image/webp`。
 
 错误响应：
 
@@ -70,12 +84,14 @@ Content-Type: image/jpeg
 | 400 | 头像路径非法 | `头像路径非法` |
 | 404 | 头像文件不存在 | `头像文件不存在` |
 
-## GET /flame/api/image/product
+---
+
+## GET `/flame/api/image/product`
 
 请求示例：
 
 ```http
-GET /flame/api/image/product?filename=%2FKeep%20%E5%BC%B9%E5%8A%9B%E5%B8%A6-%E5%85%A5%E9%97%A8%E6%AC%BE.jpg
+GET /flame/api/image/product?filename=%2FKeep%20%E5%BC%B9%E5%8A%9B%E5%B8%A6.webp
 Authorization: auth_code
 ```
 
@@ -93,7 +109,7 @@ Authorization: auth_code
 成功响应：
 
 ```http
-Content-Type: image/jpeg
+Content-Type: image/webp
 ```
 
 错误响应：
@@ -105,12 +121,14 @@ Content-Type: image/jpeg
 | 400 | 商品图片路径非法 | `商品图片路径非法` |
 | 404 | 商品图片不存在 | `商品图片文件不存在` |
 
-## GET /flame/api/image/project_icon
+---
+
+## GET `/flame/api/image/project_icon`
 
 请求示例：
 
 ```http
-GET /flame/api/image/project_icon?filename=%2F%E8%B7%91%E6%AD%A5.png
+GET /flame/api/image/project_icon?filename=%2F%E8%B7%91%E6%AD%A5.webp
 Authorization: auth_code
 ```
 
@@ -121,7 +139,7 @@ Authorization: auth_code
 成功响应示例：
 
 ```http
-Content-Type: image/png
+Content-Type: image/webp
 ```
 
 错误响应：
@@ -133,7 +151,9 @@ Content-Type: image/png
 | 400 | 项目图标路径非法 | `项目图标路径非法` |
 | 404 | 项目图标不存在 | `项目图标文件不存在` |
 
-## GET /flame/api/image/proof_record/{proof_record_id}
+---
+
+## GET `/flame/api/image/proof_record/{proof_record_id}`
 
 请求示例：
 
@@ -142,12 +162,14 @@ GET /flame/api/image/proof_record/18
 Authorization: auth_code
 ```
 
-该接口仅用于读取 `GET /flame/api/proof/current` 和 `GET /flame/api/proof/history` 返回的 `imageUrl`。后端会按 `proof_record.id`、有效状态和当前登录用户归属查询凭证，再根据所属赛季定位图片文件；不会信任客户端传入的文件名或赛季目录。
+该接口仅用于读取 `GET /flame/api/proof/current` 和 `GET /flame/api/proof/history` 返回的 `imageUrl`。后端会按 `proof_record.id`、有效状态、当前登录用户归属和赛季可见状态查询凭证，再根据所属赛季定位图片文件；不会信任客户端传入的文件名或赛季目录。
+
+客户端只能读取 `season.status = 1` 的进行中赛季和 `season.status = 3` 的已结束赛季凭证图片。未开始或结算中赛季的凭证不会通过客户端图片接口返回；管理端凭证图片接口不受该限制。
 
 成功响应示例：
 
 ```http
-Content-Type: image/jpeg
+Content-Type: image/webp
 ```
 
 错误响应：
@@ -155,6 +177,6 @@ Content-Type: image/jpeg
 | 状态码 | 场景 | detail |
 | --- | --- | --- |
 | 401 | 未登录或登录过期 | `登录状态无效或已过期，请重新登录` |
-| 404 | 凭证不存在、已失效或不属于当前用户 | `凭证不存在` |
+| 404 | 凭证不存在、已失效、不属于当前用户或赛季对客户端不可见 | `凭证不存在` |
 | 400 | 凭证图片路径非法 | `凭证图片路径非法` |
 | 404 | 凭证图片文件不存在 | `凭证图片文件不存在` |

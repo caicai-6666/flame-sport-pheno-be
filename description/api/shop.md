@@ -2,15 +2,17 @@
 
 ## 接口概览
 
+当前路由提供以下接口。
+
 | 方法 | 路径 | 是否鉴权 | 说明 |
 | --- | --- | ---: | --- |
-| GET | `/flame/api/shop/product_info` | 是 | 获取商城可见商品列表 |
-| GET | `/flame/api/shop/point_flow` | 是 | 获取当前用户积分流水 |
-| POST | `/flame/api/shop/consume` | 是 | 兑换商品并写入积分流水 |
+| `GET` | `/flame/api/shop/product_info` | 是 | 获取商城可见商品列表 |
+| `GET` | `/flame/api/shop/point_flow` | 是 | 获取当前用户积分流水 |
+| `POST` | `/flame/api/shop/consume` | 是 | 兑换商品并写入积分流水 |
 
 ---
 
-## GET /flame/api/shop/product_info
+## GET `/flame/api/shop/product_info`
 
 请求示例：
 
@@ -28,7 +30,7 @@ Authorization: auth_code
     "name": "Keep 弹力带-入门款",
     "description": "适合热身、拉伸和基础力量训练。",
     "points_required": 30,
-    "image_url": "/Keep 弹力带.jpg"
+    "image_url": "/Keep 弹力带.webp"
   }
 ]
 ```
@@ -37,11 +39,11 @@ Authorization: auth_code
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| id | number | 商品 ID |
-| name | string | 商品名称 |
-| description | string | 商品说明，数据库为空时返回空字符串 |
-| points_required | number | 兑换该商品所需积分 |
-| image_url | string | 商品图片路径，数据库为空时返回空字符串 |
+| `id` | `number` | 商品 ID |
+| `name` | `string` | 商品名称 |
+| `description` | `string` | 商品说明，数据库为空时返回空字符串 |
+| `points_required` | `number` | 兑换该商品所需积分 |
+| `image_url` | `string` | 商品图片路径，数据库为空时返回空字符串 |
 
 数据来源：
 
@@ -57,7 +59,7 @@ GET /flame/api/image/product?filename={encodeURIComponent(image_url)}
 
 ---
 
-## GET /flame/api/shop/point_flow
+## GET `/flame/api/shop/point_flow`
 
 请求示例：
 
@@ -93,12 +95,12 @@ Authorization: auth_code
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| product_name | string | 商品名称；非商品兑换流水返回空字符串 |
-| change_type | string | 积分变动类型，例如 `season_reward`、`exchange`、`manual_adjust` |
-| change_points | number | 本次积分变动值，正数增加，负数扣减 |
-| points_after | number | 本次变动后的用户积分余额 |
-| description | string | 积分变动描述，数据库为空时返回空字符串 |
-| created_at | string | 积分变动时间，ISO 秒级格式 |
+| `product_name` | `string` | 商品名称；非商品兑换流水返回空字符串 |
+| `change_type` | `string` | 积分变动类型，例如 `season_reward`、`exchange`、`manual_adjust` |
+| `change_points` | `number` | 本次积分变动值，正数增加，负数扣减 |
+| `points_after` | `number` | 本次变动后的用户积分余额 |
+| `description` | `string` | 积分变动描述，数据库为空时返回空字符串 |
+| `created_at` | `string` | 积分变动时间，ISO 秒级格式 |
 
 数据来源：
 
@@ -114,7 +116,7 @@ point_record.product_id = product.id
 
 ---
 
-## POST /flame/api/shop/consume
+## POST `/flame/api/shop/consume`
 
 请求示例：
 
@@ -136,7 +138,7 @@ Content-Type: application/json
 
 | 字段 | 类型 | 是否必填 | 说明 |
 | --- | --- | ---: | --- |
-| product_id | number | 是 | 要兑换的商品 ID，必须大于等于 1 |
+| `product_id` | `number` | 是 | 要兑换的商品 ID，必须大于等于 1 |
 
 成功响应：
 
@@ -161,7 +163,10 @@ change_points = -product.points_required
 points_after = 当前积分余额 - product.points_required
 description = 兑换商品：{product.name}
 status = 1
+gift_distribution_status = pending
 ```
+
+`gift_distribution_status` 仅供后续管理端跟踪礼品发放，不影响本接口的积分扣减结果，也不在当前响应中返回。
 
 错误响应：
 
@@ -172,4 +177,4 @@ status = 1
 | 404 | 用户不存在 | `用户不存在` |
 | 409 | 积分不足 | `积分不足，无法兑换该商品` |
 
-当前接口只处理积分扣减流水，不处理库存、订单或兑换记录表。
+当前接口只处理积分扣减流水并将礼品标记为待发放，不处理库存、订单、独立兑换记录或管理端发放操作。

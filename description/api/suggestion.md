@@ -2,11 +2,15 @@
 
 ## 接口概览
 
+当前路由提供以下接口。
+
 | 方法 | 路径 | 是否鉴权 | 说明 |
 | --- | --- | ---: | --- |
-| POST | `/flame/api/suggestion/remark` | 是 | 提交当前用户的建议 |
+| `POST` | `/flame/api/suggestion/remark` | 是 | 提交当前用户的建议 |
 
-## POST /flame/api/suggestion/remark
+---
+
+## POST `/flame/api/suggestion/remark`
 
 请求示例：
 
@@ -28,7 +32,7 @@ Content-Type: application/json
 
 | 字段 | 类型 | 是否必填 | 说明 |
 | --- | --- | ---: | --- |
-| `remark` | string | 是 | 建议内容；不能仅包含空白字符。 |
+| `remark` | `string` | 是 | 建议内容；不能仅包含空白字符。 |
 
 成功响应（`201 Created`）：
 
@@ -43,7 +47,7 @@ Content-Type: application/json
 
 - 用户 ID 从 `Authorization` 中的登录态取得，不接受客户端传入的用户 ID。
 - 建议内容去除首尾空白后写入 `user_suggestion.content`。
-- 新建建议默认可见，即 `is_visible = 1`。
+- 新建建议默认可见且处于待处理阶段，即 `status = 1`、`processing_stage = pending`。
 
 错误响应：
 

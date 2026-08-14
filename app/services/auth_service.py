@@ -1,6 +1,7 @@
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.core.auth_cache import auth_cache
 from app.core.config import settings
@@ -146,7 +147,8 @@ class AuthService:
                 avatar = await dingtalk_client.download_avatar(
                     profile.avatar_source_url,
                 )
-                saved_avatar = save_avatar_image(
+                saved_avatar = await run_in_threadpool(
+                    save_avatar_image,
                     user_id=profile.user_id,
                     content=avatar.content,
                 )

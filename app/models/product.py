@@ -1,3 +1,5 @@
+from sqlalchemy import Column
+from sqlalchemy.dialects.mysql import BIGINT
 from sqlmodel import Field, SQLModel
 
 
@@ -6,7 +8,16 @@ class Product(SQLModel, table=True):
 
     __tablename__ = "product"
 
-    id: int | None = Field(default=None, primary_key=True)
+    # 与 point_record.product_id 保持相同的无符号大整数类型，确保外键可创建。
+    id: int | None = Field(
+        default=None,
+        sa_column=Column(
+            BIGINT(unsigned=True),
+            primary_key=True,
+            autoincrement=True,
+            comment="商品ID",
+        ),
+    )
     name: str = Field(max_length=128)
     description: str | None = Field(default=None, max_length=255)
     points_required: int

@@ -1,4 +1,4 @@
-# season 接口文档
+# 赛季接口
 
 ## 路由前缀
 
@@ -6,15 +6,21 @@
 /flame/api/season
 ```
 
+---
+
 ## 接口列表
+
+当前路由提供以下接口。
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/flame/api/season` | 否 | 赛季子路由存活校验 |
-| GET | `/flame/api/season/current` | 是 | 获取当前激活赛季 |
-| GET | `/flame/api/season/participate_check` | 是 | 检查当前用户是否正式参与赛季 |
+| `GET` | `/flame/api/season` | 否 | 赛季子路由存活校验 |
+| `GET` | `/flame/api/season/current` | 是 | 获取当前激活赛季 |
+| `GET` | `/flame/api/season/participate_check` | 是 | 检查当前用户是否正式参与赛季 |
 
-## GET /flame/api/season
+---
+
+## GET `/flame/api/season`
 
 成功响应：
 
@@ -24,7 +30,9 @@
 }
 ```
 
-## GET /flame/api/season/current
+---
+
+## GET `/flame/api/season/current`
 
 成功响应：
 
@@ -46,7 +54,16 @@ ORDER BY season.start_date DESC
 LIMIT 1
 ```
 
-接口会在当前进程内缓存当前赛季 ID 和要求锁定项目数量。
+赛季状态含义：
+
+| `status` | 含义 | 是否为当前赛季 |
+| --- | --- | --- |
+| `0` | 未开始 | 否 |
+| `1` | 进行中 | 是 |
+| `2` | 结算中 | 否 |
+| `3` | 已结束 | 否 |
+
+接口每次请求都直接查询数据库，不缓存当前赛季 ID 或要求锁定项目数量，因此后台调整激活状态后会立即反映到客户端。
 
 确认当前赛季后，服务会确保 `assets/images/proof_record/{season_id}` 目录存在，为后续凭证上传预先准备本地存储位置。
 
@@ -56,7 +73,9 @@ LIMIT 1
 | --- | --- | --- |
 | 404 | 当前没有激活赛季 | `当前没有激活的赛季` |
 
-## GET /flame/api/season/participate_check
+---
+
+## GET `/flame/api/season/participate_check`
 
 请求示例：
 
@@ -87,6 +106,6 @@ season_user.level_id IS NOT NULL
 | 状态码 | 场景 | detail |
 | --- | --- | --- |
 | 401 | 未登录或登录过期 | `登录状态无效或已过期，请重新登录` |
-| 404 | 赛季不存在 | `赛季不存在` |
+| 404 | 赛季不存在或未激活 | `赛季不存在或未激活` |
 | 403 | 超过报名时间 | `已超过赛季报名时间` |
 | 409 | 尚未正式参与 | `用户尚未正式参与该赛季` |

@@ -5,12 +5,17 @@ from time import monotonic
 
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
-from app.core.runtime_env import CurrentSeasonRuntime
-from app.core.storage import build_proof_record_image_path
+from app.core.storage import (
+    build_proof_record_image_path,
+    convert_proof_record_image_to_webp,
+    save_proof_record_image,
+)
 from app.models.project_upload_config import ProjectUploadConfig
 from app.models.proof_record import ProofReviewStatus
+from app.models.season import SeasonStatus
 from app.models.season_user_project import SeasonUserProject
 from app.repositories.project_repository import project_repository
 from app.repositories.proof_record_repository import proof_record_repository
@@ -78,7 +83,7 @@ class ProofService:
         """上传或更新当前用户指定运动日期的项目凭证。"""
         normalized_record_type = self._normalize_record_type(record_type)
         normalized_note = self._normalize_note(note)
-        await self._ensure_jpg_image(image)
+        self._ensure_supported_image_media_type(image)
 
         season = await season_repository.get_by_id(
             session=session,
@@ -88,6 +93,11 @@ class ProofService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="赛季不存在",
+            )
+        if season.status != SeasonStatus.ACTIVE:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="赛季未激活，无法上传凭证",
             )
         self._validate_proof_date(season=season, proof_date=proof_date)
 
@@ -147,6 +157,17 @@ class ProofService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="上传图片不能为空",
             )
+        try:
+            # Pillow 编码属于 CPU 密集操作，在线程池完成，避免阻塞其他异步请求。
+            webp_image_bytes = await run_in_threadpool(
+                convert_proof_record_image_to_webp,
+                image_bytes,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
 
         old_image_path: Path | None = None
         saved_new_image = False
@@ -173,7 +194,7 @@ class ProofService:
                 )
 
             # 保存文件后写数据库；如果数据库失败，会删除本次新文件避免残留。
-            image_path.write_bytes(image_bytes)
+            save_proof_record_image(path=image_path, content=webp_image_bytes)
             saved_new_image = True
             old_image_path = await self._create_or_update_proof_record_for_date(
                 session=session,
@@ -213,12 +234,9 @@ class ProofService:
         session: AsyncSession,
     ) -> list[dict[str, str]]:
         """查询当前用户过往赛季历史凭证列表。"""
-        await self._ensure_current_season_runtime_initialized(session=session)
-        current_season_id = CurrentSeasonRuntime.season_id or 0
         history_records = await proof_record_repository.list_user_history(
             session=session,
             user_id=user_id,
-            excluded_season_id=current_season_id,
         )
         return [
             {
@@ -244,12 +262,16 @@ class ProofService:
         session: AsyncSession,
     ) -> list[dict[str, str]]:
         """查询当前用户当前赛季凭证列表。"""
-        await self._ensure_current_season_runtime_initialized(session=session)
-        current_season_id = CurrentSeasonRuntime.season_id or 0
+        current_season = await season_repository.get_current(session=session)
+        if current_season is None or current_season.id is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="当前没有激活的赛季",
+            )
         current_records = await proof_record_repository.list_user_current(
             session=session,
             user_id=user_id,
-            current_season_id=current_season_id,
+            current_season_id=current_season.id,
         )
         return [
             {
@@ -270,26 +292,6 @@ class ProofService:
             }
             for proof_record, season, project in current_records
         ]
-
-    async def _ensure_current_season_runtime_initialized(
-        self,
-        session: AsyncSession,
-    ) -> None:
-        """确保当前赛季运行时缓存已经初始化。"""
-        if CurrentSeasonRuntime.is_initialized():
-            return
-
-        season = await season_repository.get_current(session=session)
-        if season is None or season.id is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="当前没有激活的赛季",
-            )
-
-        CurrentSeasonRuntime.set(
-            season_id=season.id,
-            required_project_count=season.required_project_count,
-        )
 
     async def _create_or_update_proof_record_for_date(
         self,
@@ -435,12 +437,17 @@ class ProofService:
             )
         return normalized_note
 
-    async def _ensure_jpg_image(self, image: UploadFile) -> None:
-        """校验上传文件必须是 JPG 图片。"""
-        if image.content_type not in {"image/jpeg", "image/jpg"}:
+    def _ensure_supported_image_media_type(self, image: UploadFile) -> None:
+        """校验上传媒体类型；有效内容随后统一重编码为 WebP。"""
+        if image.content_type not in {
+            "image/jpeg",
+            "image/jpg",
+            "image/png",
+            "image/webp",
+        }:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="仅支持上传 JPG 图片",
+                detail="凭证图片仅支持 JPEG、PNG 或 WebP",
             )
 
     def _build_proof_record_image_url(self, image_path: Path) -> str:

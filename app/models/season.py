@@ -1,6 +1,16 @@
 from datetime import date
+from enum import IntEnum
 
 from sqlmodel import Field, SQLModel
+
+
+class SeasonStatus(IntEnum):
+    """赛季生命周期状态。"""
+
+    NOT_STARTED = 0
+    ACTIVE = 1
+    SETTLING = 2
+    ENDED = 3
 
 
 class Season(SQLModel, table=True):

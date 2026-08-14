@@ -1,4 +1,4 @@
-# auth 接口文档
+# 鉴权接口
 
 ## 路由前缀
 
@@ -6,15 +6,21 @@
 /flame/api/auth
 ```
 
+---
+
 ## 接口列表
+
+当前路由提供以下接口。
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/flame/api/auth` | 否 | 鉴权子路由存活校验 |
-| POST | `/flame/api/auth/login` | 否 | 登录并写入服务内存认证缓存 |
-| GET | `/flame/api/auth/profile_complete_check` | 是 | 检查当前用户资料是否完整 |
+| `GET` | `/flame/api/auth` | 否 | 鉴权子路由存活校验 |
+| `POST` | `/flame/api/auth/login` | 否 | 登录并写入服务内存认证缓存 |
+| `GET` | `/flame/api/auth/profile_complete_check` | 是 | 检查当前用户资料是否完整 |
 
-## GET /flame/api/auth
+---
+
+## GET `/flame/api/auth`
 
 用于确认 `auth` 子路由已注册。
 
@@ -26,7 +32,9 @@
 }
 ```
 
-## POST /flame/api/auth/login
+---
+
+## POST `/flame/api/auth/login`
 
 请求体：
 
@@ -39,7 +47,7 @@
 服务端会使用钉钉企业内部应用免登解析 `auth_code` 对应的 `userId`，并查询本地 `user`：
 
 - 用户已存在且启用：直接登录。
-- 用户不存在：继续查询钉钉员工详情和第一个所属部门的详情；钉钉姓名以空白字符切分，仅将首个片段写入本地 `user.name`；如有头像，下载并转换为 JPEG 后保存到本地头像目录，将 `/用户ID.jpg` 写入 `user.avatar_url`，再在一个事务中初始化本地 `department` 与 `user` 后登录。
+- 用户不存在：继续查询钉钉员工详情和第一个所属部门的详情；钉钉姓名以空白字符切分，仅将首个片段写入本地 `user.name`；如有头像，下载 JPEG、PNG 或 WebP 后统一转换为不超过 300 KiB 的 WebP，保存到本地头像目录并将 `/用户ID.webp` 写入 `user.avatar_url`，再在一个事务中初始化本地 `department` 与 `user` 后登录。
 
 成功后将：
 
@@ -79,6 +87,8 @@ auth_code -> user.id
 | 502 | 钉钉服务异常、资料缺失、通讯录权限不足或头像下载失败 | `钉钉登录服务暂时不可用，请稍后重试` |
 | 503 | 未配置钉钉应用凭证 | `钉钉登录尚未完成服务端配置` |
 
+---
+
 ## 后续访问鉴权
 
 业务接口通过请求头传入：
@@ -89,7 +99,9 @@ Authorization: auth_code
 
 后端从认证缓存解析当前 `user_id`。缓存不存在、为空或过期时返回 `401`。
 
-## GET /flame/api/auth/profile_complete_check
+---
+
+## GET `/flame/api/auth/profile_complete_check`
 
 请求示例：
 
@@ -114,9 +126,9 @@ Authorization: auth_code
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| is_complete | boolean | 当前用户资料是否完整 |
-| height_cm_completed | boolean | 身高字段是否已填写 |
-| missing_fields | array | 当前缺失字段列表 |
+| `is_complete` | `boolean` | 当前用户资料是否完整 |
+| `height_cm_completed` | `boolean` | 身高字段是否已填写 |
+| `missing_fields` | `array` | 当前缺失字段列表 |
 
 错误响应：
 

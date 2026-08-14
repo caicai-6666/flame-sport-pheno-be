@@ -13,11 +13,13 @@
 - HTTPX
 - Uvicorn
 
+---
+
 ## 当前实现
 
 - **鉴权**：对接钉钉企业内部 H5 微应用免登；后端使用 `auth_code` 换取钉钉 `userId`，并维护进程内认证缓存。
 - **用户资料**：查询资料完整度，维护用户身高信息。
-- **赛季参与**：查询当前赛季，检查用户参与状态和报名时间。
+- **赛季参与**：按未开始、进行中、结算中和已结束管理赛季生命周期，查询当前赛季并检查用户参与状态和报名时间。
 - **运动项目**：查询项目与挑战规则，锁定赛季项目及挑战等级，并查询已锁定项目的完成进度。
 - **运动凭证**：读取项目上传配置，上传 JPG 凭证，查询当前赛季和历史凭证；可由每日 DeepSeek 文本初审写入审核意见、初审状态和项目进度。
 - **排行榜**：定时统计当前赛季初审通过的有效凭证数量并生成排行榜快照；减重挑战月初不计数，月末同项目最多计一次。
@@ -25,6 +27,8 @@
 - **本地资源**：管理头像、项目图标、商品图片和运动凭证图片。
 
 当前鉴权缓存和钉钉应用 access token 只存在于单个服务进程中，暂不支持多实例共享登录态、刷新令牌和角色权限。
+
+---
 
 ## 项目结构
 
@@ -52,6 +56,8 @@ router -> service -> repository -> model
 
 应用启动时会创建本地资源目录，并启动认证缓存清理、排行榜快照刷新，以及可选的每日 DeepSeek 文本初审任务。
 
+---
+
 ## 本地运行
 
 1. 安装依赖：
@@ -75,9 +81,11 @@ router -> service -> repository -> model
 
 MySQL Docker 环境的构建和启动方式见 [`description/dev/mysql_docker.md`](description/dev/mysql_docker.md)。前后端与 MySQL 的统一部署方式见 [`description/dev/docker_compose.md`](description/dev/docker_compose.md)。
 
+---
+
 ## 项目文档
 
-项目概况和详细文档导航见 [`description/project.md`](description/project.md)。开发接口前建议依次阅读：
+完整文档导航见 [`description/README.md`](description/README.md)，业务概况见 [`description/project.md`](description/project.md)，文档格式与表达统一遵循 [`description/document-style.md`](description/document-style.md)。开发接口前建议依次阅读：
 
 1. 相关数据库表设计。
 2. 对应业务流程和状态规则。

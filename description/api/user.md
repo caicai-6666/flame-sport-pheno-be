@@ -2,14 +2,16 @@
 
 ## 接口概览
 
+当前路由提供以下接口。
+
 | 方法 | 路径 | 是否鉴权 | 说明 |
 | --- | --- | ---: | --- |
-| GET | `/flame/api/user` | 否 | 用户子路由存活校验 |
-| POST | `/flame/api/user/profile` | 是 | 设置当前用户资料 |
+| `GET` | `/flame/api/user` | 否 | 用户子路由存活校验 |
+| `POST` | `/flame/api/user/profile` | 是 | 设置当前用户资料 |
 
 ---
 
-## GET /flame/api/user
+## GET `/flame/api/user`
 
 成功响应：
 
@@ -21,7 +23,7 @@
 
 ---
 
-## POST /flame/api/user/profile
+## POST `/flame/api/user/profile`
 
 请求示例：
 
@@ -43,7 +45,7 @@ Content-Type: application/json
 
 | 字段 | 类型 | 是否必填 | 说明 |
 | --- | --- | ---: | --- |
-| height_cm | number | 是 | 用户身高，单位 cm，范围 50 到 300 |
+| `height_cm` | `number` | 是 | 用户身高，单位 cm，范围 50 到 300 |
 
 成功响应：
 

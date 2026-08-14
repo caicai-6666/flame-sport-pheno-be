@@ -4,9 +4,9 @@ from datetime import datetime
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.runtime_env import CurrentSeasonRuntime
 from app.models.project import Project
 from app.models.project_rule import ProjectRule
+from app.models.season import Season
 from app.repositories.project_repository import project_repository
 from app.repositories.season_repository import season_repository
 from app.repositories.season_user_repository import season_user_repository
@@ -50,6 +50,10 @@ class ProjectService:
         session: AsyncSession,
     ) -> list[int]:
         """查询用户在指定赛季已锁定且有效的项目 ID。"""
+        await self._get_requested_active_season(
+            session=session,
+            season_id=season_id,
+        )
         season_user = await season_user_repository.get_by_season_id_and_user_id(
             session=session,
             season_id=season_id,
@@ -70,6 +74,10 @@ class ProjectService:
         session: AsyncSession,
     ) -> list[dict[str, float | int]]:
         """查询用户在指定赛季已锁定项目的完成进度。"""
+        await self._get_requested_active_season(
+            session=session,
+            season_id=season_id,
+        )
         season_user = await season_user_repository.get_by_season_id_and_user_id(
             session=session,
             season_id=season_id,
@@ -99,12 +107,10 @@ class ProjectService:
         session: AsyncSession,
     ) -> dict[str, int]:
         """锁定当前用户在当前赛季下的项目。"""
-        await self._ensure_current_season_runtime_initialized(session=session)
-        if CurrentSeasonRuntime.season_id != season_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="请求赛季不是当前激活赛季",
-            )
+        season = await self._get_requested_active_season(
+            session=session,
+            season_id=season_id,
+        )
 
         project = await project_repository.get_visible_by_id(
             session=session,
@@ -147,7 +153,7 @@ class ProjectService:
                 session=session,
                 season_user_id=season_user.id,
             )
-            required_project_count = CurrentSeasonRuntime.required_project_count or 0
+            required_project_count = season.required_project_count
             if locked_project_count + 1 > required_project_count:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
@@ -182,12 +188,10 @@ class ProjectService:
         session: AsyncSession,
     ) -> dict[str, int]:
         """锁定当前用户在当前赛季下的挑战等级。"""
-        await self._ensure_current_season_runtime_initialized(session=session)
-        if CurrentSeasonRuntime.season_id != season_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="请求赛季不是当前激活赛季",
-            )
+        season = await self._get_requested_active_season(
+            session=session,
+            season_id=season_id,
+        )
 
         project_level = await project_repository.get_visible_level_by_id(
             session=session,
@@ -205,7 +209,7 @@ class ProjectService:
                 season_id=season_id,
                 user_id=user_id,
             )
-            required_project_count = CurrentSeasonRuntime.required_project_count or 0
+            required_project_count = season.required_project_count
             if season_user is None or season_user.id is None:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
@@ -236,25 +240,24 @@ class ProjectService:
             await session.rollback()
             raise
 
-    async def _ensure_current_season_runtime_initialized(
+    async def _get_requested_active_season(
         self,
         session: AsyncSession,
-    ) -> None:
-        """确保当前赛季运行时缓存已经初始化。"""
-        if CurrentSeasonRuntime.is_initialized():
-            return
-
+        season_id: int,
+    ) -> Season:
+        """查询当前激活赛季，并校验请求中的赛季 ID。"""
         season = await season_repository.get_current(session=session)
         if season is None or season.id is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="当前没有激活的赛季",
             )
-
-        CurrentSeasonRuntime.set(
-            season_id=season.id,
-            required_project_count=season.required_project_count,
-        )
+        if season.id != season_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="请求赛季不是当前激活赛季",
+            )
+        return season
 
     def _build_project_item(self, project: Project) -> dict[str, int | str]:
         """构建前端项目列表项。"""
