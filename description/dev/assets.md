@@ -13,6 +13,8 @@ assets/
 
 本地直接运行时，资源位于后端仓库的 `assets/`。Docker Compose 部署时，后端项目根目录为 `/workspace`，资源目录位于与 Python 包 `/workspace/app` 平级的 `/workspace/assets`，并由具名卷 `backend_assets` 持久化，以避免频繁拉取或重建后端工作区影响上传文件。
 
+图片读取接口使用应用内置的扩展名与 MIME 类型映射。即使精简容器没有 `/etc/mime.types`，WebP 文件仍必须返回 `Content-Type: image/webp`，不能降级为 `application/octet-stream`；JPEG、PNG 和 GIF 使用相同的稳定映射。
+
 ---
 
 ## avatar

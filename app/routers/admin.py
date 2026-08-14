@@ -1,10 +1,9 @@
-import mimetypes
-
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
+from app.core.media_type import resolve_image_media_type
 from app.services.image_service import image_service
 
 
@@ -30,8 +29,7 @@ async def get_admin_avatar(
 
     return FileResponse(
         path=image_path,
-        media_type=mimetypes.guess_type(image_path.name)[0]
-        or "application/octet-stream",
+        media_type=resolve_image_media_type(image_path),
         filename=image_path.name,
         # 管理页面可能展示多个用户头像，避免浏览器持久缓存管理数据。
         headers={"Cache-Control": "private, no-store"},
@@ -49,8 +47,7 @@ async def get_admin_project_icon(
 
     return FileResponse(
         path=image_path,
-        media_type=mimetypes.guess_type(image_path.name)[0]
-        or "application/octet-stream",
+        media_type=resolve_image_media_type(image_path),
         filename=image_path.name,
         headers={"Cache-Control": "private, no-store"},
     )
@@ -79,8 +76,7 @@ async def get_admin_product_image(
 
     return FileResponse(
         path=image_path,
-        media_type=mimetypes.guess_type(image_path.name)[0]
-        or "application/octet-stream",
+        media_type=resolve_image_media_type(image_path),
         filename=image_path.name,
         headers={"Cache-Control": "private, no-store"},
     )
@@ -115,8 +111,7 @@ async def get_admin_proof_record_image(
 
     return FileResponse(
         path=image_path,
-        media_type=mimetypes.guess_type(image_path.name)[0]
-        or "application/octet-stream",
+        media_type=resolve_image_media_type(image_path),
         filename=image_path.name,
         headers={"Cache-Control": "private, no-store"},
     )

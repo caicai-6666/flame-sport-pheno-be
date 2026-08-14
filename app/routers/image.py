@@ -1,11 +1,10 @@
-import mimetypes
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_session
+from app.core.media_type import resolve_image_media_type
 from app.core.security import get_current_user_id
 from app.services.image_service import image_service
 
@@ -36,8 +35,7 @@ async def get_avatar(
 
     return FileResponse(
         path=image_path,
-        media_type=mimetypes.guess_type(image_path.name)[0]
-        or "application/octet-stream",
+        media_type=resolve_image_media_type(image_path),
         filename=image_path.name,
         headers={"Cache-Control": IMAGE_CACHE_CONTROL},
     )
@@ -55,8 +53,7 @@ async def get_product_image(
 
     return FileResponse(
         path=image_path,
-        media_type=mimetypes.guess_type(image_path.name)[0]
-        or "application/octet-stream",
+        media_type=resolve_image_media_type(image_path),
         filename=image_path.name,
         headers={"Cache-Control": IMAGE_CACHE_CONTROL},
     )
@@ -74,8 +71,7 @@ async def get_project_icon_image(
 
     return FileResponse(
         path=image_path,
-        media_type=mimetypes.guess_type(image_path.name)[0]
-        or "application/octet-stream",
+        media_type=resolve_image_media_type(image_path),
         headers={"Cache-Control": IMAGE_CACHE_CONTROL},
     )
 
@@ -97,8 +93,7 @@ async def get_proof_record_image(
 
     return FileResponse(
         path=image_path,
-        media_type=mimetypes.guess_type(image_path.name)[0]
-        or "application/octet-stream",
+        media_type=resolve_image_media_type(image_path),
         filename=image_path.name,
         headers={"Cache-Control": IMAGE_CACHE_CONTROL},
     )
