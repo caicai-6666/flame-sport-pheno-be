@@ -48,6 +48,7 @@ Content-Type: application/json
 - 用户 ID 从 `Authorization` 中的登录态取得，不接受客户端传入的用户 ID。
 - 建议内容去除首尾空白后写入 `user_suggestion.content`。
 - 新建建议默认可见且处于待处理阶段，即 `status = 1`、`processing_stage = pending`。
+- 赛季开始配置保护期内仍允许提交建议。
 
 错误响应：
 

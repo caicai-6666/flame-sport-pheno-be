@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,10 +8,18 @@ from app.core.storage import ensure_proof_record_season_directory
 from app.models.season import SeasonStatus
 from app.repositories.season_repository import season_repository
 from app.repositories.season_user_repository import season_user_repository
+from app.services.user_write_guard import (
+    BUSINESS_TIMEZONE,
+    get_user_write_window,
+    is_user_write_frozen,
+)
 
 
 class SeasonService:
-    async def get_current_season(self, session: AsyncSession) -> dict[str, int | str]:
+    async def get_current_season(
+        self,
+        session: AsyncSession,
+    ) -> dict[str, bool | int | str]:
         """获取当前激活赛季信息。"""
         season = await season_repository.get_current(session=session)
         if season is None:
@@ -19,6 +27,12 @@ class SeasonService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="当前没有激活的赛季",
             )
+
+        current_time = datetime.now(BUSINESS_TIMEZONE)
+        write_freeze_starts_at, write_available_at = get_user_write_window(
+            start_date=season.start_date,
+            edit_window_hours=settings.ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS,
+        )
 
         # 当前赛季确认后提前准备凭证目录，避免首次上传因目录缺失失败。
         ensure_proof_record_season_directory(season.id or 0)
@@ -28,6 +42,15 @@ class SeasonService:
             "start_date": season.start_date.isoformat(),
             "end_date": season.end_date.isoformat(),
             "required_project_count": season.required_project_count,
+            # 浏览器使用服务端时间轴展示只读状态；真正的写入权限仍由事务内守卫校验。
+            "server_time": current_time.isoformat(),
+            "user_write_frozen": is_user_write_frozen(
+                start_date=season.start_date,
+                edit_window_hours=settings.ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS,
+                current_time=current_time,
+            ),
+            "user_write_freeze_starts_at": write_freeze_starts_at.isoformat(),
+            "user_write_available_at": write_available_at.isoformat(),
         }
 
     async def check_season_participation(

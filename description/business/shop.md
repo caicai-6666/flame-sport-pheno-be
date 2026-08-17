@@ -95,11 +95,14 @@ product_id
 
 兑换流程：
 
-1. 查询商品并校验 `product.status = 1`。
-2. 锁定当前用户的 `user` 行，串行化同一用户的积分扣减。
-3. 查询当前用户最后一条有效积分流水，读取 `points_after` 作为当前积分余额。
-4. 判断当前积分余额是否足够支付 `product.points_required`。
-5. 积分足够时写入一条 `exchange` 类型的 `point_record`。
+1. 校验当前时间不在赛季开始后的配置保护期。
+2. 查询商品并校验 `product.status = 1`。
+3. 锁定当前用户的 `user` 行，串行化同一用户的积分扣减。
+4. 查询当前用户最后一条有效积分流水，读取 `points_after` 作为当前积分余额。
+5. 判断当前积分余额是否足够支付 `product.points_required`。
+6. 积分足够时写入一条 `exchange` 类型的 `point_record`。
+
+保护期使用 `ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS`，并按 `Asia/Shanghai` 的赛季开始日 `00:00` 起算；保护期内返回 `409` 且不产生积分流水。完整口径参见[赛季参与和项目锁定流程](season_project_flow.md#赛季开始配置保护期)。
 
 写入流水：
 

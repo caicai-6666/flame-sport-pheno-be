@@ -22,5 +22,18 @@ class SeasonRepository:
         )
         return result.scalar_one_or_none()
 
+    async def lock_active_for_user_write(
+        self,
+        session: AsyncSession,
+    ) -> list[Season]:
+        """共享锁定全部激活赛季，保证写入保护期判断基于一致状态。"""
+        result = await session.execute(
+            select(Season)
+            .where(Season.status == SeasonStatus.ACTIVE)
+            .order_by(Season.id.asc())
+            .with_for_update(read=True)
+        )
+        return list(result.scalars().all())
+
 
 season_repository = SeasonRepository()

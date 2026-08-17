@@ -27,7 +27,7 @@
 | 用户资料 | [用户资料业务说明](business/user_profile.md) | [User 接口](api/user.md) | [用户表](db/user.md)、[部门表](db/department.md) | `app/routers/user.py` |
 | 赛季与项目选择 | [赛季与项目选择流程](business/season_project_flow.md) | [Season 接口](api/season.md)、[Project 接口](api/project.md) | [赛季表](db/season.md)、[赛季用户表](db/season-user.md)、[赛季用户项目表](db/season-user-project.md) | `app/routers/season.py`、`app/routers/project.py` |
 | 凭证上传与查询 | [凭证上传业务说明](business/proof_upload.md) | [Proof 接口](api/proof.md) | [凭证记录表](db/proof-record.md)、[项目上传配置表](db/project-upload-config.md) | `app/routers/proof.py` |
-| 审核、排行榜与积分 | [审核与积分说明](business/review_and_points.md) | [Leaderboard 接口](api/leaderboard.md) | [排行榜快照表](db/leaderboard-snapshot.md)、[积分流水表](db/point-record.md) | `app/routers/leaderboard.py` |
+| 审核、通知、排行榜与积分 | [审核与积分说明](business/review_and_points.md)、[钉钉工作通知投递](business/notifications.md) | [Leaderboard 接口](api/leaderboard.md) | [用户通知表](db/notification.md)、[排行榜快照表](db/leaderboard-snapshot.md)、[积分流水表](db/point-record.md) | `app/core/preliminary_review_scheduler.py`、`app/core/notification_scheduler.py`、`app/routers/leaderboard.py` |
 | 积分商城 | [商城业务说明](business/shop.md) | [Shop 接口](api/shop.md) | [商品表](db/product.md)、[积分流水表](db/point-record.md) | `app/routers/shop.py` |
 | 用户建议 | [用户建议业务说明](business/suggestion.md) | [Suggestion 接口](api/suggestion.md) | [用户建议表](db/user-suggestion.md) | `app/routers/suggestion.py` |
 | 图片与本地资源 | — | [Image 接口](api/image.md) | 参见各业务表的图片字段 | `app/routers/image.py`、`app/core/storage.py` |
@@ -65,6 +65,7 @@
 | [鉴权业务说明](business/authentication.md) | 生产与开发登录、钉钉同步和认证缓存 |
 | [凭证上传业务说明](business/proof_upload.md) | 凭证保存、重传、查询和文件清理 |
 | [审核与积分说明](business/review_and_points.md) | 文本初审、终审、排行榜和积分结算 |
+| [钉钉工作通知投递](business/notifications.md) | 通用 Markdown、异步投递状态和失败重试 |
 | [赛季与项目选择流程](business/season_project_flow.md) | 赛季参与、项目锁定和挑战等级选择 |
 | [商城业务说明](business/shop.md) | 积分查询、商品展示和兑换规则 |
 | [用户建议业务说明](business/suggestion.md) | 建议提交规则和事务边界 |
@@ -79,6 +80,7 @@
 | 文档 | 数据表 |
 | --- | --- |
 | [部门表](db/department.md) | `department` |
+| [用户通知表](db/notification.md) | `notification` |
 | [排行榜快照表](db/leaderboard-snapshot.md) | `leaderboard_snapshot` |
 | [积分流水表](db/point-record.md) | `point_record` |
 | [商品表](db/product.md) | `product` |

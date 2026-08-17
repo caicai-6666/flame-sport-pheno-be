@@ -65,6 +65,27 @@ class DingTalkAvatar:
     content: bytes
 
 
+@dataclass(frozen=True)
+class DingTalkWorkNotificationProgress:
+    """钉钉工作通知异步任务的发送进度。"""
+
+    status: int
+    progress: int
+
+    @property
+    def is_complete(self) -> bool:
+        """状态值 2 表示异步发送任务已经处理完毕。"""
+        return self.status == 2
+
+
+@dataclass(frozen=True)
+class DingTalkWorkNotificationResult:
+    """钉钉工作通知对具体接收人的最终发送结果。"""
+
+    delivered_user_ids: frozenset[str]
+    failed_user_ids: frozenset[str]
+
+
 class DingTalkClient:
     """企业内部 H5 微应用的钉钉服务端调用客户端。"""
 
@@ -72,6 +93,18 @@ class DingTalkClient:
     USER_INFO_URL = "https://oapi.dingtalk.com/topapi/v2/user/getuserinfo"
     USER_DETAIL_URL = "https://oapi.dingtalk.com/topapi/v2/user/get"
     DEPARTMENT_DETAIL_URL = "https://oapi.dingtalk.com/topapi/v2/department/get"
+    WORK_NOTIFICATION_SEND_URL = (
+        "https://oapi.dingtalk.com/topapi/message/"
+        "corpconversation/asyncsend_v2"
+    )
+    WORK_NOTIFICATION_PROGRESS_URL = (
+        "https://oapi.dingtalk.com/topapi/message/"
+        "corpconversation/getsendprogress"
+    )
+    WORK_NOTIFICATION_RESULT_URL = (
+        "https://oapi.dingtalk.com/topapi/message/"
+        "corpconversation/getsendresult"
+    )
     AVATAR_MAX_BYTES = 5 * 1024 * 1024
     AVATAR_CONTENT_TYPES = {
         "image/jpeg",
@@ -91,6 +124,142 @@ class DingTalkClient:
         return bool(
             settings.DINGTALK_CLIENT_ID
             and settings.DINGTALK_CLIENT_SECRET
+        )
+
+    def is_notification_configured(self) -> bool:
+        """工作通知除应用凭证外还必须配置正整数 AgentId。"""
+        return bool(
+            self.is_configured()
+            and settings.DINGTALK_AGENT_ID is not None
+            and settings.DINGTALK_AGENT_ID > 0
+        )
+
+    async def send_markdown_work_notification(
+        self,
+        user_id: str,
+        title: str,
+        text: str,
+    ) -> int:
+        """向单个企业成员提交 Markdown 工作通知并返回异步任务 ID。"""
+        agent_id = self._get_notification_agent_id()
+        access_token = await self.get_access_token()
+        response_data = await self._post_json(
+            url=self.WORK_NOTIFICATION_SEND_URL,
+            params={"access_token": access_token},
+            payload={
+                "agent_id": agent_id,
+                "userid_list": user_id,
+                "to_all_user": False,
+                "msg": {
+                    "msgtype": "markdown",
+                    "markdown": {
+                        "title": title,
+                        "text": text,
+                    },
+                },
+            },
+        )
+        self._ensure_legacy_success(
+            response_data=response_data,
+            operation_name="钉钉工作通知发送",
+        )
+        return self._positive_integer(
+            response_data.get("task_id"),
+            operation_name="钉钉工作通知发送",
+            field_name="task_id",
+        )
+
+    async def get_work_notification_progress(
+        self,
+        task_id: int,
+    ) -> DingTalkWorkNotificationProgress:
+        """查询工作通知异步任务进度，完成后才能可靠解释接收人结果。"""
+        response_data = await self._request_work_notification_status(
+            url=self.WORK_NOTIFICATION_PROGRESS_URL,
+            task_id=task_id,
+            operation_name="钉钉工作通知进度查询",
+        )
+        progress_data = response_data.get("progress")
+        if not isinstance(progress_data, dict):
+            raise DingTalkRequestError("钉钉工作通知进度响应格式错误")
+
+        status = self._non_negative_integer(
+            progress_data.get("status"),
+            operation_name="钉钉工作通知进度查询",
+            field_name="status",
+        )
+        progress = self._non_negative_integer(
+            progress_data.get("progress"),
+            operation_name="钉钉工作通知进度查询",
+            field_name="progress",
+        )
+        if status not in {0, 1, 2} or progress > 100:
+            raise DingTalkRequestError("钉钉工作通知进度响应格式错误")
+        return DingTalkWorkNotificationProgress(
+            status=status,
+            progress=progress,
+        )
+
+    async def get_work_notification_result(
+        self,
+        task_id: int,
+    ) -> DingTalkWorkNotificationResult:
+        """查询已完成任务的已投递和明确失败用户集合。"""
+        response_data = await self._request_work_notification_status(
+            url=self.WORK_NOTIFICATION_RESULT_URL,
+            task_id=task_id,
+            operation_name="钉钉工作通知结果查询",
+        )
+        send_result = response_data.get("send_result")
+        if not isinstance(send_result, dict):
+            raise DingTalkRequestError("钉钉工作通知结果响应格式错误")
+
+        delivered_user_ids = set(
+            self._optional_string_tuple(
+                send_result.get("read_user_id_list"),
+                operation_name="钉钉工作通知结果查询",
+                field_name="read_user_id_list",
+            )
+        )
+        delivered_user_ids.update(
+            self._optional_string_tuple(
+                send_result.get("unread_user_id_list"),
+                operation_name="钉钉工作通知结果查询",
+                field_name="unread_user_id_list",
+            )
+        )
+
+        failed_user_ids: set[str] = set()
+        for field_name in (
+            "failed_user_id_list",
+            "invalid_user_id_list",
+            "forbidden_user_id_list",
+        ):
+            failed_user_ids.update(
+                self._optional_string_tuple(
+                    send_result.get(field_name),
+                    operation_name="钉钉工作通知结果查询",
+                    field_name=field_name,
+                )
+            )
+
+        forbidden_list = send_result.get("forbidden_list")
+        if forbidden_list is not None:
+            if not isinstance(forbidden_list, list):
+                raise DingTalkRequestError("钉钉工作通知结果响应格式错误")
+            for forbidden_item in forbidden_list:
+                if not isinstance(forbidden_item, dict):
+                    raise DingTalkRequestError("钉钉工作通知结果响应格式错误")
+                forbidden_user_id = (
+                    forbidden_item.get("userid")
+                    or forbidden_item.get("user_id")
+                )
+                if isinstance(forbidden_user_id, str) and forbidden_user_id.strip():
+                    failed_user_ids.add(forbidden_user_id.strip())
+
+        return DingTalkWorkNotificationResult(
+            delivered_user_ids=frozenset(delivered_user_ids),
+            failed_user_ids=frozenset(failed_user_ids),
         )
 
     async def get_user_id_by_auth_code(self, auth_code: str) -> str:
@@ -354,6 +523,116 @@ class DingTalkClient:
         if not isinstance(result, dict):
             raise DingTalkRequestError(f"{operation_name}响应格式错误")
         return result
+
+    async def _request_work_notification_status(
+        self,
+        *,
+        url: str,
+        task_id: int,
+        operation_name: str,
+    ) -> dict[str, object]:
+        """工作通知查询接口共用 AgentId、task_id 和旧版错误码协议。"""
+        agent_id = self._get_notification_agent_id()
+        access_token = await self.get_access_token()
+        response_data = await self._post_json(
+            url=url,
+            params={"access_token": access_token},
+            payload={"agent_id": agent_id, "task_id": task_id},
+        )
+        self._ensure_legacy_success(
+            response_data=response_data,
+            operation_name=operation_name,
+        )
+        return response_data
+
+    def _get_notification_agent_id(self) -> int:
+        """读取工作通知 AgentId，并在外部调用前拒绝不完整配置。"""
+        if not self.is_notification_configured():
+            raise DingTalkConfigurationError(
+                "钉钉工作通知应用凭证或 AgentId 未配置",
+            )
+        return settings.DINGTALK_AGENT_ID or 0
+
+    def _ensure_legacy_success(
+        self,
+        *,
+        response_data: dict[str, object],
+        operation_name: str,
+    ) -> None:
+        """校验旧版工作通知接口的顶层 errcode。"""
+        error_code = response_data.get("errcode")
+        if error_code not in (None, 0, "0"):
+            raise DingTalkRequestError(
+                f"{operation_name}调用失败",
+                error_code=str(error_code),
+            )
+
+    def _positive_integer(
+        self,
+        value: object,
+        *,
+        operation_name: str,
+        field_name: str,
+    ) -> int:
+        """兼容钉钉网关返回数字字符串，同时排除布尔值和非正数。"""
+        parsed_value = self._non_negative_integer(
+            value,
+            operation_name=operation_name,
+            field_name=field_name,
+        )
+        if parsed_value <= 0:
+            raise DingTalkRequestError(
+                f"{operation_name}未包含有效 {field_name}",
+            )
+        return parsed_value
+
+    def _non_negative_integer(
+        self,
+        value: object,
+        *,
+        operation_name: str,
+        field_name: str,
+    ) -> int:
+        """解析钉钉数值字段，避免 Python 将布尔值误当作整数。"""
+        if isinstance(value, bool):
+            raise DingTalkRequestError(
+                f"{operation_name}未包含有效 {field_name}",
+            )
+        if isinstance(value, int):
+            parsed_value = value
+        elif isinstance(value, str) and value.strip().isdigit():
+            parsed_value = int(value.strip())
+        else:
+            raise DingTalkRequestError(
+                f"{operation_name}未包含有效 {field_name}",
+            )
+        if parsed_value < 0:
+            raise DingTalkRequestError(
+                f"{operation_name}未包含有效 {field_name}",
+            )
+        return parsed_value
+
+    def _optional_string_tuple(
+        self,
+        value: object,
+        *,
+        operation_name: str,
+        field_name: str,
+    ) -> tuple[str, ...]:
+        """解析工作通知结果中的可选用户 ID 数组。"""
+        if value is None:
+            return ()
+        if not isinstance(value, list):
+            raise DingTalkRequestError(f"{operation_name}响应格式错误")
+
+        parsed_values: list[str] = []
+        for item in value:
+            if not isinstance(item, str) or not item.strip():
+                raise DingTalkRequestError(
+                    f"{operation_name}响应字段 {field_name} 格式错误",
+                )
+            parsed_values.append(item.strip())
+        return tuple(parsed_values)
 
     def _required_string(
         self,

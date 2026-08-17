@@ -17,6 +17,10 @@ from app.core.leaderboard_scheduler import (
     start_leaderboard_refresh_task,
     stop_leaderboard_refresh_task,
 )
+from app.core.notification_scheduler import (
+    start_notification_delivery_task,
+    stop_notification_delivery_task,
+)
 from app.core.preliminary_review_scheduler import (
     start_preliminary_review_task,
     stop_preliminary_review_task,
@@ -49,6 +53,7 @@ async def lifespan(application: FastAPI):
     # 开发模式不会调用钉钉，避免本地联调产生无意义的 token 刷新请求。
     if settings.APP_MODE == "production":
         start_dingtalk_access_token_refresh_task()
+        start_notification_delivery_task()
     start_leaderboard_refresh_task()
     start_preliminary_review_task()
     try:
@@ -57,6 +62,7 @@ async def lifespan(application: FastAPI):
         await stop_preliminary_review_task()
         await stop_leaderboard_refresh_task()
         if settings.APP_MODE == "production":
+            await stop_notification_delivery_task()
             await stop_dingtalk_access_token_refresh_task()
         await stop_auth_cache_cleanup_task()
 
