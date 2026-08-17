@@ -90,6 +90,19 @@ DINGTALK_ACCESS_TOKEN_REFRESH_SKEW_SECONDS=300
 
 应用获取 token 成功时会在 Uvicorn 控制台输出有效期；失败时会输出安全的 HTTP 状态码和钉钉错误码（例如 `invalidClientIdOrSecret`），不会输出 ClientSecret 或真实 access token。
 
+### 钉钉 Markdown 工作通知
+
+生产模式发送工作通知还需要配置企业内部微应用的正整数 `AgentId`：
+
+```text
+DINGTALK_AGENT_ID=123456789
+DINGTALK_NOTIFICATION_CHECK_INTERVAL_SECONDS=60
+```
+
+`DINGTALK_NOTIFICATION_CHECK_INTERVAL_SECONDS` 必须大于 `0`，同时控制待发送任务扫描、已受理任务结果查询和失败任务的最小重试间隔。`AgentId`、`ClientId` 和 `ClientSecret` 均配置完整时，生产模式会启动通知任务，并在启动后立即处理一次积压通知。
+
+开发模式不会启动钉钉 token 刷新或通知任务，本地 `.env` 可以不配置 `DINGTALK_AGENT_ID`。如需联调真实通知，应使用独立测试应用和测试成员，不得复制生产凭证到开发环境。
+
 ### DeepSeek 定时文本初审与手动评测
 
 `tests/test_llm_sport_evaluation.py` 是手动运行的提示词评测脚本，用于验证“项目规则 + 用户 note”生成初审结论、进度增量和审核理由的效果。它通过 `openai.AsyncOpenAI` 调用 DeepSeek 的 OpenAI 兼容接口。
@@ -129,9 +142,13 @@ python -m unittest discover -s tests -p 'test_llm_sport_evaluation.py' -v
 
 ## 启动
 
+推荐在项目根目录启动：
+
 ```bash
-uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+也可以通过 IDE 或 Python 直接运行 `app/main.py`。配置模块始终按文件位置读取项目根目录的 `.env`，不依赖进程当前工作目录；从 `app/` 目录启动时也不会错误寻找 `app/.env`。
 
 `app/main.py` 中的直接运行配置用于脚本启动；本地开发更建议使用上面的 Uvicorn 命令，以便明确控制监听地址和热更新参数。
 
@@ -153,11 +170,20 @@ uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 2. 创建本地资源目录。
 3. 启动认证缓存过期清理任务。
 4. 在 `APP_MODE=production` 时启动应用 access token 定时预热任务。
-5. 启动排行榜快照刷新任务。
-6. 按配置启动定时文本初审任务。
-7. 注册所有路由。
+5. 在钉钉应用凭证和 `AgentId` 完整时启动工作通知投递任务。
+6. 启动排行榜快照刷新任务。
+7. 按配置启动定时文本初审任务。
+8. 注册所有路由。
 
 数据库尚未配置 `status = 1` 的赛季时，应用仍可正常冷启动。排行榜刷新任务会跳过本次刷新并记录信息日志，待后续激活赛季后在下一次调度周期自动开始刷新。
+
+赛季开始配置保护期通过以下环境变量控制，单位为小时：
+
+```text
+ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS=24
+```
+
+客户后端固定按 `Asia/Shanghai` 的 `season.start_date 00:00` 计算保护期，不依赖本地机器或容器时区。配置为 `0` 时不冻结客户业务写入；身高更新和建议提交始终允许。
 
 本地资源目录包括：
 

@@ -46,7 +46,13 @@ proof_record.created_at <= 本轮扫描时间 - LLM_PRELIMINARY_REVIEW_MIN_AGE_S
 
 `season_user.level_id` 与 `proof_record.project_id` 共同定位唯一的启用 `project_rule`。等级 ID、赛季 ID、用户 ID、图片路径和项目其他等级规则都不会发送给模型。模型仅接收项目名称、凭证类型、该条规则、规则备注和用户 `note`；减重挑战的月初记录额外发送用户身高，月末记录额外发送同赛季最早通过月初记录的审核意见。
 
-模型返回 `reviewComment`、`reviewStatus` 和 `progressDelta`。初审通过时，原始 `progressDelta` 保存到 `proof_record.progress_delta`，经过进度条上限分配后实际生效的部分保存到 `proof_record.increase`。普通项目在同一事务内累加 `season_user_project.completion_progress` 并封顶到 `1`；减重挑战月初通过时进度保持 `0`，月末通过时直接设为 `1`。模型异常、超时或返回非法 JSON 时保持 `pending`，下次任务会补审。用户在模型调用期间重传凭证时，旧结果不会覆盖新内容。
+模型返回 `reviewComment`、`reviewStatus` 和 `progressDelta`。初审通过时，原始 `progressDelta` 保存到 `proof_record.progress_delta`，经过进度条上限分配后实际生效的部分保存到 `proof_record.increase`。普通项目在同一事务内累加 `season_user_project.completion_progress` 并封顶到 `1`；减重挑战月初通过时进度保持 `0`，月末通过时直接设为 `1`。
+
+初审失败时，客户端后端在同一事务中创建标题为“运动凭证初审结果”的 `pending` 通知。通知依次保存审核结果、运动项目、凭证日期和审核意见；初审通过不创建通知。通知写入失败时初审结论一并回滚，凭证保持 `pending` 等待后续任务重试。
+
+通知提交钉钉、送达状态同步和失败重试统一遵循[钉钉工作通知投递](notifications.md)，初审服务不直接调用钉钉。
+
+模型异常、超时或返回非法 JSON 时保持 `pending`，下次任务会补审。用户在模型调用期间重传凭证时，旧结果不会覆盖新内容，也不会创建过期通知。
 
 同运动日期重传的审核口径是“先撤销旧版本，再按新版本重算”：上传时若该项目该日期已有有效记录，系统会锁定 `season_user_project` 行、扣回旧记录的 `increase`，并将释放的进度优先回补给同项目下更早上传且 `progress_delta > increase` 的有效通过凭证。旧记录原地重置为待审，同时清零 `progress_delta` 和 `increase`；无论旧记录此前是初审通过还是终审通过，都不会遗留旧进度。新版本初审通过后再从剩余进度空间中分配新的贡献。
 

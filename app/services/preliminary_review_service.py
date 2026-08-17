@@ -25,12 +25,15 @@ from app.models.season_user import SeasonUser
 from app.models.season_user_project import SeasonUserProject
 from app.models.user import User
 from app.models.project import Project
+from app.repositories.notification_repository import notification_repository
 from app.repositories.proof_record_repository import proof_record_repository
 from app.repositories.season_user_repository import season_user_repository
 from app.services.project_progress_service import project_progress_service
 
 
 logger = logging.getLogger(__name__)
+PRELIMINARY_REJECTION_NOTIFICATION_TITLE = "运动凭证初审结果"
+MISSING_REVIEW_COMMENT = "未填写"
 
 
 @dataclass
@@ -50,6 +53,23 @@ PendingReviewRow = tuple[
     ProjectRule,
     ProjectUploadConfig,
 ]
+
+
+def build_preliminary_rejection_notification_fields(
+    project: Project,
+    proof_record: ProofRecord,
+    review_comment: str,
+) -> list[dict[str, str]]:
+    """构造初审失败通知的稳定展示快照，保持消息字段顺序固定。"""
+    return [
+        {"key": "审核结果", "value": "未通过"},
+        {"key": "运动项目", "value": project.name},
+        {"key": "凭证日期", "value": proof_record.proof_date.isoformat()},
+        {
+            "key": "审核意见",
+            "value": review_comment or MISSING_REVIEW_COMMENT,
+        },
+    ]
 
 
 class PreliminaryReviewService:
@@ -145,7 +165,7 @@ class PreliminaryReviewService:
         pending_row: PendingReviewRow,
         review_result: PreliminaryReviewResult,
     ) -> bool:
-        proof_record, season_user, _, _, _, upload_config = pending_row
+        proof_record, season_user, _, project, _, upload_config = pending_row
         if proof_record.id is None or season_user.id is None:
             raise RuntimeError("待初审凭证缺少主键关联")
 
@@ -244,6 +264,19 @@ class PreliminaryReviewService:
             )
             if not stored_increase:
                 raise RuntimeError("初审凭证实际进度贡献写入失败")
+
+        if review_result.review_status == ProofReviewStatus.PRELIMINARY_REJECTED:
+            # 通知与初审结论原子提交；过期结果被条件更新丢弃时不会产生通知。
+            await notification_repository.create_pending(
+                session=session,
+                user_id=season_user.user_id,
+                message_title=PRELIMINARY_REJECTION_NOTIFICATION_TITLE,
+                message_fields=build_preliminary_rejection_notification_fields(
+                    project=project,
+                    proof_record=proof_record,
+                    review_comment=review_result.review_comment,
+                ),
+            )
 
         await session.commit()
         return True

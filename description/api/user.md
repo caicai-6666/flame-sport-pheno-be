@@ -60,6 +60,7 @@ Content-Type: application/json
 - 当前接口只更新 `user.height_cm`。
 - 后端会将身高保留两位小数后写入数据库。
 - 用户资料完整性检查仍通过 `/flame/api/auth/profile_complete_check` 完成。
+- 赛季开始配置保护期内仍允许更新身高。
 
 错误响应：
 

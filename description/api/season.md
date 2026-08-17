@@ -42,9 +42,24 @@
   "name": "2026年7月赛季",
   "start_date": "2026-07-01",
   "end_date": "2026-07-31",
-  "required_project_count": 3
+  "required_project_count": 3,
+  "server_time": "2026-07-01T08:00:00+08:00",
+  "user_write_frozen": true,
+  "user_write_freeze_starts_at": "2026-07-01T00:00:00+08:00",
+  "user_write_available_at": "2026-07-02T00:00:00+08:00"
 }
 ```
+
+配置保护期字段如下：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `server_time` | `string` | 上海时区的服务端响应时间，ISO 8601 格式 |
+| `user_write_frozen` | `boolean` | 当前是否处于客户业务写入保护期 |
+| `user_write_freeze_starts_at` | `string` | 保护期起点，ISO 8601 格式 |
+| `user_write_available_at` | `string` | 恢复客户业务写入的时刻，ISO 8601 格式 |
+
+上述字段供客户端展示只读状态和预计开放时间。客户端判断不替代 Service 事务内的写入保护校验；`ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS = 0` 时起止时刻相同，`user_write_frozen` 始终为 `false`。
 
 数据来源：
 

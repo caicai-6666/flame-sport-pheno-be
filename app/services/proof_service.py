@@ -22,6 +22,7 @@ from app.repositories.proof_record_repository import proof_record_repository
 from app.repositories.season_repository import season_repository
 from app.repositories.season_user_repository import season_user_repository
 from app.services.project_progress_service import project_progress_service
+from app.services.user_write_guard import ensure_user_write_allowed
 
 
 UPLOAD_CONFIG_CACHE_TTL_SECONDS = 300
@@ -81,6 +82,12 @@ class ProofService:
         session: AsyncSession,
     ) -> dict[str, str]:
         """上传或更新当前用户指定运动日期的项目凭证。"""
+        # 必须先判断保护期，避免拒绝请求仍创建赛季目录或处理上传图片。
+        try:
+            await ensure_user_write_allowed(session=session)
+        except Exception:
+            await session.rollback()
+            raise
         normalized_record_type = self._normalize_record_type(record_type)
         normalized_note = self._normalize_note(note)
         self._ensure_supported_image_media_type(image)

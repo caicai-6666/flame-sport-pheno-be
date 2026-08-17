@@ -16,6 +16,13 @@ test_*.py
 test_*.http
 *_test.http
 
+# 保留正式回归测试；其他临时测试文件继续沿用上方忽略规则。
+!tests/
+!tests/__init__.py
+!tests/test_dingtalk_work_notifications.py
+!tests/test_notification_delivery.py
+!tests/test_preliminary_review_notifications.py
+
 # 运行期资源文件
 # 实际图片等资源由 assets/.gitignore 控制，不提交到 Git。
 assets/**

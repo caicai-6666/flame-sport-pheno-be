@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.shop_repository import shop_repository
 from app.repositories.user_repository import user_repository
+from app.services.user_write_guard import ensure_user_write_allowed
 
 
 class ShopService:
@@ -52,6 +53,11 @@ class ShopService:
         session: AsyncSession,
     ) -> dict[str, int | str]:
         """兑换商品并写入积分扣减流水。"""
+        try:
+            await ensure_user_write_allowed(session=session)
+        except Exception:
+            await session.rollback()
+            raise
         product = await shop_repository.get_visible_product_by_id(
             session=session,
             product_id=product_id,

@@ -60,10 +60,23 @@ location ^~ /flame/api/admin/ {
 
 ```bash
 # 首次部署前编辑 .env，至少替换 MYSQL_ROOT_PASSWORD、MYSQL_PASSWORD、
-# DINGTALK_CLIENT_ID、DINGTALK_CLIENT_SECRET、
+# DINGTALK_CLIENT_ID、DINGTALK_CLIENT_SECRET、DINGTALK_AGENT_ID、
 # VUE_APP_DINGTALK_CORP_ID 和 VUE_APP_DINGTALK_CLIENT_ID。
 docker compose up -d --build
 ```
+
+Compose 需要把以下赛季保护期和工作通知配置显式注入后端容器；后端镜像不会复制项目 `.env`：
+
+```yaml
+environment:
+  ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS: ${ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS:-24}
+  DINGTALK_AGENT_ID: ${DINGTALK_AGENT_ID:-}
+  DINGTALK_NOTIFICATION_CHECK_INTERVAL_SECONDS: ${DINGTALK_NOTIFICATION_CHECK_INTERVAL_SECONDS:-60}
+```
+
+缺少 `DINGTALK_AGENT_ID` 时，登录相关钉钉能力不受影响，但工作通知投递任务不会启动。
+
+`ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS` 同时供管理端和客户后端读取。客户后端按 `Asia/Shanghai` 的赛季开始日 `00:00` 起算，并在保护期内拒绝项目锁定、等级锁定、凭证上传、礼品兑换和首次用户初始化；配置为 `0` 时不冻结。修改该配置后需要重建或重启后端容器才能生效。
 
 ---
 

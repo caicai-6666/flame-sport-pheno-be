@@ -20,6 +20,7 @@ from app.models.department import Department
 from app.models.user import User
 from app.repositories.department_repository import department_repository
 from app.repositories.user_repository import user_repository
+from app.services.user_write_guard import ensure_user_write_allowed
 
 
 class AuthService:
@@ -113,6 +114,15 @@ class AuthService:
                 profile.department_ids[0],
             )
 
+            downloaded_avatar = None
+            if profile.avatar_source_url:
+                downloaded_avatar = await dingtalk_client.download_avatar(
+                    profile.avatar_source_url,
+                )
+
+            # 外部资料读取不产生本地副作用；保护期校验必须早于部门、用户和头像写入。
+            await ensure_user_write_allowed(session=session)
+
             local_department = await department_repository.get_by_id(
                 session=session,
                 department_id=department.department_id,
@@ -143,14 +153,11 @@ class AuthService:
                 )
 
             avatar_url: str | None = None
-            if profile.avatar_source_url:
-                avatar = await dingtalk_client.download_avatar(
-                    profile.avatar_source_url,
-                )
+            if downloaded_avatar is not None:
                 saved_avatar = await run_in_threadpool(
                     save_avatar_image,
                     user_id=profile.user_id,
-                    content=avatar.content,
+                    content=downloaded_avatar.content,
                 )
                 avatar_url = saved_avatar.url
 

@@ -10,6 +10,7 @@ from app.models.season import Season
 from app.repositories.project_repository import project_repository
 from app.repositories.season_repository import season_repository
 from app.repositories.season_user_repository import season_user_repository
+from app.services.user_write_guard import ensure_user_write_allowed
 
 
 class ProjectService:
@@ -107,6 +108,11 @@ class ProjectService:
         session: AsyncSession,
     ) -> dict[str, int]:
         """锁定当前用户在当前赛季下的项目。"""
+        try:
+            await ensure_user_write_allowed(session=session)
+        except Exception:
+            await session.rollback()
+            raise
         season = await self._get_requested_active_season(
             session=session,
             season_id=season_id,
@@ -188,6 +194,11 @@ class ProjectService:
         session: AsyncSession,
     ) -> dict[str, int]:
         """锁定当前用户在当前赛季下的挑战等级。"""
+        try:
+            await ensure_user_write_allowed(session=session)
+        except Exception:
+            await session.rollback()
+            raise
         season = await self._get_requested_active_season(
             session=session,
             season_id=season_id,

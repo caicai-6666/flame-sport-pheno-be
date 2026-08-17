@@ -23,3 +23,5 @@ POST /flame/api/suggestion/remark
 5. 新记录默认 `status = 1`、`processing_stage = pending`，创建时间由服务端写入。
 
 建议记录关联 `user.id`，不配置级联删除。用户停用或删除后的建议保留策略，待后台管理能力实现时再明确。
+
+建议提交不受赛季开始配置保护期限制，保护期内仍可正常写入。
