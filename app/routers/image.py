@@ -20,6 +20,24 @@ async def check_image_router():
     return {"code": 200}
 
 
+@router.get("/poster")
+async def get_poster_image(
+    user_id: str = Depends(get_current_user_id),
+):
+    """校验 Authorization 后，返回当前活动海报 WebP 文件。"""
+    image_path = image_service.get_poster_image_path()
+    if not image_path.is_file():
+        raise HTTPException(status_code=404, detail="活动海报文件不存在")
+
+    return FileResponse(
+        path=image_path,
+        media_type="image/webp",
+        filename=image_path.name,
+        # 海报使用固定地址且允许覆盖，每次读取都需向服务端确认最新版本。
+        headers={"Cache-Control": "private, no-cache"},
+    )
+
+
 @router.get("/avatar")
 async def get_avatar(
     user_id: str = Depends(get_current_user_id),

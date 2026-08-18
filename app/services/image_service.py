@@ -8,8 +8,10 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.storage import (
+    convert_poster_image_to_webp,
     convert_project_icon_to_webp,
     remove_replaced_product_image,
+    save_poster_image,
     save_product_image,
     save_project_icon_image,
 )
@@ -19,6 +21,14 @@ from app.repositories.user_repository import user_repository
 
 PROJECT_ICON_MAX_BYTES = 5 * 1024 * 1024
 PRODUCT_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+POSTER_IMAGE_MAX_BYTES = 10 * 1024 * 1024
+POSTER_IMAGE_FILENAME = "活动规则.webp"
+POSTER_SOURCE_MEDIA_TYPES = {
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+}
 PRODUCT_IMAGE_FORMAT_BY_SUFFIX = {
     ".jpg": "JPEG",
     ".jpeg": "JPEG",
@@ -34,6 +44,60 @@ PRODUCT_IMAGE_FORMAT_BY_MEDIA_TYPE = {
 
 
 class ImageService:
+    def get_poster_image_path(self) -> Path:
+        """返回固定活动海报路径，调用方不能通过请求参数选择其他资源。"""
+        poster_path = settings.POSTER_IMAGE_DIR / POSTER_IMAGE_FILENAME
+        poster_base_dir = settings.POSTER_IMAGE_DIR.resolve()
+        if not poster_path.resolve().is_relative_to(poster_base_dir):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="活动海报路径非法",
+            )
+        return poster_path
+
+    async def replace_poster_image(
+        self,
+        image: UploadFile,
+    ) -> dict[str, int | str]:
+        """将管理端上传图片转换为 WebP，并原子覆盖唯一活动海报。"""
+        if image.content_type not in POSTER_SOURCE_MEDIA_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="活动海报仅支持 JPEG、PNG 或 WebP",
+            )
+
+        content = await image.read(POSTER_IMAGE_MAX_BYTES + 1)
+        if not content:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="活动海报不能为空",
+            )
+        if len(content) > POSTER_IMAGE_MAX_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="活动海报不能超过 10 MiB",
+            )
+
+        try:
+            encoded_image = await run_in_threadpool(
+                convert_poster_image_to_webp,
+                content,
+            )
+            save_poster_image(
+                path=self.get_poster_image_path(),
+                content=encoded_image,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+
+        return {
+            "image_url": f"/{POSTER_IMAGE_FILENAME}",
+            "size_bytes": len(encoded_image),
+        }
+
     async def get_avatar_image_path(
         self,
         user_id: str,

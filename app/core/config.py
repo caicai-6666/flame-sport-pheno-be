@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     PROJECT_ICON_IMAGE_DIR: Path = IMAGE_ASSETS_DIR / "project_icon"
     PRODUCT_IMAGE_DIR: Path = IMAGE_ASSETS_DIR / "product"
     PROOF_RECORD_IMAGE_DIR: Path = IMAGE_ASSETS_DIR / "proof_record"
+    POSTER_IMAGE_DIR: Path = IMAGE_ASSETS_DIR / "poster"
     DATABASE_URL: str = "mysql+asyncmy://flame:flame123456@127.0.0.1:3307/flame_sport_pheno?charset=utf8mb4"
     DB_ECHO: bool = False
     AUTH_CACHE_TTL_SECONDS: int = 7200

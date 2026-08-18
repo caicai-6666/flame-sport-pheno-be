@@ -17,6 +17,29 @@ async def check_admin_router():
     return {"code": 200, "service": "admin"}
 
 
+@router.get("/poster")
+async def get_admin_poster_image():
+    """返回管理端可读取的当前活动海报 WebP 文件。"""
+    image_path = image_service.get_poster_image_path()
+    if not image_path.is_file():
+        raise HTTPException(status_code=404, detail="活动海报文件不存在")
+
+    return FileResponse(
+        path=image_path,
+        media_type="image/webp",
+        filename=image_path.name,
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@router.post("/poster")
+async def replace_admin_poster_image(
+    image: UploadFile = File(...),
+):
+    """将管理端上传图片统一转换为 WebP，并覆盖当前活动海报。"""
+    return await image_service.replace_poster_image(image=image)
+
+
 @router.get("/avator")
 async def get_admin_avatar(
     avatar_url: str = Query(...),

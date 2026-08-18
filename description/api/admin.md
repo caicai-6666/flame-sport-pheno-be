@@ -33,6 +33,8 @@ http://backend:8000/flame/api/admin
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/flame/api/admin` | 管理端内部路由存活校验 |
+| `GET` | `/flame/api/admin/poster` | 获取当前活动海报 WebP 图片 |
+| `POST` | `/flame/api/admin/poster` | 将上传图片转换为 WebP 并覆盖当前活动海报 |
 | `GET` | `/flame/api/admin/avator` | 根据头像地址读取用户头像 |
 | `GET` | `/flame/api/admin/project_icon` | 根据图标地址读取项目图标 |
 | `POST` | `/flame/api/admin/project_icon` | 将上传图片转换为无损 WebP 项目图标 |
@@ -55,6 +57,77 @@ http://backend:8000/flame/api/admin
 ```
 
 该接口当前只用于确认管理路由和 Docker 内部网络可用，不读取业务数据。
+
+---
+
+## GET `/flame/api/admin/poster`
+
+返回固定资源 `assets/images/poster/活动规则.webp`，供 Docker 内部管理端预览当前活动海报。接口不接受文件名或路径参数。
+
+成功响应：
+
+```http
+Content-Type: image/webp
+Cache-Control: private, no-store
+```
+
+固定文件不存在时返回：
+
+```json
+{
+  "detail": "活动海报文件不存在"
+}
+```
+
+---
+
+## POST `/flame/api/admin/poster`
+
+将管理端上传的 JPEG、PNG 或 WebP 图片重新编码为高质量 WebP，并原子覆盖唯一活动海报 `assets/images/poster/活动规则.webp`。接口不允许调用方指定文件名，避免覆盖海报目录外的资源。
+
+请求类型：
+
+```http
+Content-Type: multipart/form-data
+```
+
+表单字段：
+
+| 字段 | 类型 | 是否必填 | 说明 |
+| --- | --- | ---: | --- |
+| `image` | `File` | 是 | JPEG、PNG 或 WebP 图片，最大 10 MiB |
+
+Docker 内部请求示例：
+
+```bash
+curl -X POST 'http://backend:8000/flame/api/admin/poster' \
+  -F 'image=@./活动规则.png;type=image/png'
+```
+
+成功响应：
+
+```json
+{
+  "image_url": "/活动规则.webp",
+  "size_bytes": 470258
+}
+```
+
+覆盖规则：
+
+1. 校验声明媒体类型和实际图片内容属于 JPEG、PNG 或 WebP。
+2. 修正 EXIF 方向，保持原始像素尺寸和透明通道，并以质量 `90` 重编码为 WebP。
+3. 先写入海报目录中的临时文件，再原子替换固定文件；读取请求只会得到完整旧图或完整新图。
+4. 覆盖不涉及数据库写入，成功响应中的 `image_url` 始终固定。
+
+错误响应：
+
+| 状态码 | 场景 | `detail` |
+| --- | --- | --- |
+| `400` | 文件为空 | `活动海报不能为空` |
+| `400` | 媒体类型或实际内容不受支持 | `活动海报仅支持 JPEG、PNG 或 WebP` 或 `上传内容不是有效的活动海报` |
+| `413` | 上传文件超过 10 MiB | `活动海报不能超过 10 MiB` |
+| `422` | 缺少 `image` | FastAPI 参数校验错误 |
 
 ---
 

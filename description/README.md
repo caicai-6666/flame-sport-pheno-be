@@ -31,7 +31,7 @@
 | 审核、通知、排行榜与积分 | [审核与积分说明](business/review_and_points.md)、[钉钉工作通知投递](business/notifications.md) | [Leaderboard 接口](api/leaderboard.md) | [用户通知表](db/notification.md)、[排行榜快照表](db/leaderboard-snapshot.md)、[积分流水表](db/point-record.md) | `app/core/preliminary_review_scheduler.py`、`app/core/notification_scheduler.py`、`app/routers/leaderboard.py` |
 | 积分商城 | [商城业务说明](business/shop.md) | [Shop 接口](api/shop.md) | [商品表](db/product.md)、[积分流水表](db/point-record.md) | `app/routers/shop.py` |
 | 用户建议 | [用户建议业务说明](business/suggestion.md) | [Suggestion 接口](api/suggestion.md) | [用户建议表](db/user-suggestion.md) | `app/routers/suggestion.py` |
-| 图片与本地资源 | — | [Image 接口](api/image.md) | 参见各业务表的图片字段 | `app/routers/image.py`、`app/core/storage.py` |
+| 图片与本地资源 | — | [Image 接口](api/image.md)、[Admin 接口](api/admin.md) | 参见各业务表的图片字段 | `app/routers/image.py`、`app/routers/admin.py`、`app/core/storage.py` |
 | 管理端内部能力 | 后续随审核功能补充 | [Admin 接口](api/admin.md) | 按具体管理功能读取 | `app/routers/admin.py` |
 | 服务健康检查 | — | [Health 接口](api/health.md) | — | `app/routers/health.py` |
 
@@ -46,7 +46,7 @@
 | [Admin 接口](api/admin.md) | Docker 内部管理端接口及资源读取能力 |
 | [Auth 接口](api/auth.md) | 登录、认证缓存与资料完整度检查 |
 | [Health 接口](api/health.md) | 服务健康检查 |
-| [Image 接口](api/image.md) | 头像、商品图片、项目图标和凭证图片读取 |
+| [Image 接口](api/image.md) | 头像、商品图片、项目图标、凭证图片和活动海报读取 |
 | [Leaderboard 接口](api/leaderboard.md) | 当前赛季排行榜查询 |
 | [Project 接口](api/project.md) | 项目、规则、锁定和完成进度查询 |
 | [Proof 接口](api/proof.md) | 凭证配置、上传、当前记录和历史记录 |

@@ -15,6 +15,7 @@
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
 | `GET` | `/flame/api/image` | 否 | 图片子路由存活校验 |
+| `GET` | `/flame/api/image/poster` | 是 | 获取当前活动海报 WebP 图片 |
 | `GET` | `/flame/api/image/avatar` | 是 | 获取当前用户头像图片 |
 | `GET` | `/flame/api/image/product` | 是 | 获取指定商品图片 |
 | `GET` | `/flame/api/image/project_icon` | 是 | 获取指定项目图标 |
@@ -53,6 +54,35 @@ Cache-Control: private, max-age={IMAGE_CACHE_MAX_AGE_SECONDS}
   "code": 200
 }
 ```
+
+---
+
+## GET `/flame/api/image/poster`
+
+返回固定资源 `assets/images/poster/活动规则.webp`。客户端不能传入文件名或本地路径，避免通过图片接口读取其他资源。
+
+请求示例：
+
+```http
+GET /flame/api/image/poster
+Authorization: auth_code
+```
+
+成功响应：
+
+```http
+Content-Type: image/webp
+Cache-Control: private, no-cache
+```
+
+海报使用固定 URL 且允许管理端覆盖，因此浏览器每次读取都会向服务端确认资源是否更新，避免长期缓存旧海报。
+
+错误响应：
+
+| 状态码 | 场景 | detail |
+| --- | --- | --- |
+| `401` | 未登录或登录过期 | `登录状态无效或已过期，请重新登录` |
+| `404` | 固定海报文件不存在 | `活动海报文件不存在` |
 
 ---
 

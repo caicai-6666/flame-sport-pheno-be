@@ -9,11 +9,30 @@ assets/
     product/
     project_icon/
     proof_record/
+    poster/
 ```
 
 本地直接运行时，资源位于后端仓库的 `assets/`。Docker Compose 部署时，后端项目根目录为 `/workspace`，资源目录位于与 Python 包 `/workspace/app` 平级的 `/workspace/assets`，并由具名卷 `backend_assets` 持久化，以避免频繁拉取或重建后端工作区影响上传文件。
 
 图片读取接口使用应用内置的扩展名与 MIME 类型映射。即使精简容器没有 `/etc/mime.types`，WebP 文件仍必须返回 `Content-Type: image/webp`，不能降级为 `application/octet-stream`；JPEG、PNG 和 GIF 使用相同的稳定映射。
+
+---
+
+## poster
+
+活动海报使用固定文件：
+
+```text
+assets/images/poster/活动规则.webp
+```
+
+客户端登录后通过 `GET /flame/api/image/poster` 读取，管理端通过 Docker 内部的 `GET /flame/api/admin/poster` 预览。两个接口都不接收路径参数，避免读取其他本地资源。
+
+管理端通过 `POST /flame/api/admin/poster` 覆盖海报。上传源文件可以是 JPEG、PNG 或 WebP，最大 10 MiB；服务端修正 EXIF 方向并以质量 `90` 统一重编码为 WebP，固定文件名不会随上传文件名变化。写入使用同目录临时文件进行原子替换，覆盖期间的读取请求不会得到不完整文件。
+
+客户端海报地址不会变化，因此响应使用 `private, no-cache`，要求浏览器重新确认固定资源是否更新。管理端预览使用 `private, no-store`。
+
+Docker Compose 的 `backend_assets` 卷挂载整个 `/workspace/assets`。首次发布该功能时需要确认卷内已经存在 `/workspace/assets/images/poster/活动规则.webp`；代码仓库中的开发图片不会随镜像构建自动复制到该卷。
 
 ---
 
@@ -194,4 +213,4 @@ python scripts/convert_proof_record_images_to_webp.py \
 
 ## 路径安全
 
-头像、项目图标、商品图片和凭证图片读取时都应确保路径没有逃逸出对应资源目录。
+头像、项目图标、商品图片、凭证图片和活动海报读取时都应确保路径没有逃逸出对应资源目录。

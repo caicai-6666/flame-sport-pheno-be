@@ -20,6 +20,8 @@ PROJECT_ICON_MAX_EDGE = 1600
 PROJECT_ICON_SOURCE_FORMATS = {"JPEG", "PNG", "WEBP"}
 PROOF_RECORD_WEBP_QUALITY = 82
 PROOF_RECORD_SOURCE_FORMATS = {"JPEG", "PNG", "WEBP"}
+POSTER_WEBP_QUALITY = 90
+POSTER_SOURCE_FORMATS = {"JPEG", "PNG", "WEBP"}
 
 
 @dataclass(frozen=True)
@@ -43,6 +45,7 @@ def ensure_asset_directories() -> None:
     settings.PROJECT_ICON_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
     settings.PRODUCT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
     settings.PROOF_RECORD_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    settings.POSTER_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def build_proof_record_image_path(
@@ -216,6 +219,64 @@ def save_project_icon_image(*, path: Path, content: bytes) -> None:
         raise ValueError("项目图标路径非法")
     if resolved_path.suffix.lower() != ".webp":
         raise ValueError("项目图标存储地址必须以 .webp 结尾")
+
+    resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_bytes_atomically(path=resolved_path, content=content)
+
+
+def convert_poster_image_to_webp(content: bytes) -> bytes:
+    """将活动海报解码并统一重编码为适合文字展示的高质量 WebP。"""
+    if not content:
+        raise ValueError("活动海报不能为空")
+
+    try:
+        with Image.open(BytesIO(content)) as source_image:
+            if source_image.format not in POSTER_SOURCE_FORMATS:
+                raise ValueError("活动海报仅支持 JPEG、PNG 或 WebP")
+            normalized_image = ImageOps.exif_transpose(source_image)
+            has_transparency = (
+                "A" in normalized_image.getbands()
+                or "transparency" in normalized_image.info
+            )
+            converted_image = normalized_image.convert(
+                "RGBA" if has_transparency else "RGB"
+            )
+            output = BytesIO()
+            converted_image.save(
+                output,
+                format="WEBP",
+                quality=POSTER_WEBP_QUALITY,
+                method=6,
+                alpha_quality=100,
+            )
+            encoded_image = output.getvalue()
+
+        with Image.open(BytesIO(encoded_image)) as verified_image:
+            verified_image.verify()
+            if verified_image.format != "WEBP":
+                raise ValueError("活动海报转换为 WebP 失败")
+        return encoded_image
+    except ValueError:
+        raise
+    except (
+        Image.DecompressionBombError,
+        OSError,
+        UnidentifiedImageError,
+    ) as exc:
+        raise ValueError("上传内容不是有效的活动海报") from exc
+
+
+def save_poster_image(*, path: Path, content: bytes) -> None:
+    """将 WebP 海报原子写入固定资源目录，避免读取到半写入文件。"""
+    if not content:
+        raise ValueError("活动海报不能为空")
+
+    poster_base_dir = settings.POSTER_IMAGE_DIR.resolve()
+    resolved_path = path.resolve()
+    if not resolved_path.is_relative_to(poster_base_dir):
+        raise ValueError("活动海报路径非法")
+    if resolved_path.suffix.lower() != ".webp":
+        raise ValueError("活动海报存储地址必须以 .webp 结尾")
 
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
     _write_bytes_atomically(path=resolved_path, content=content)
