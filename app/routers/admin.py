@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_session
 from app.core.media_type import resolve_image_media_type
 from app.services.image_service import image_service
+from app.services.preliminary_review_service import preliminary_review_service
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -114,4 +115,16 @@ async def get_admin_proof_record_image(
         media_type=resolve_image_media_type(image_path),
         filename=image_path.name,
         headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@router.post("/proof_record/{proof_record_id}/preliminary-review")
+async def review_admin_proof_record_immediately(
+    proof_record_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """按凭证 ID 立即执行与定时任务相同的文本初审。"""
+    return await preliminary_review_service.review_pending_by_id(
+        session=session,
+        proof_record_id=proof_record_id,
     )

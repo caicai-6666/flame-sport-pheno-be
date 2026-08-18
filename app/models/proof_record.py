@@ -139,7 +139,7 @@ class ProofRecord(SQLModel, table=True):
         sa_column=Column(
             String(500),
             nullable=True,
-            comment="审核评论，用于后台人员填写审核说明",
+            comment="初审或终审的审核说明，终审时可覆盖初审意见",
         ),
     )
     # 保留模型给出的原始增量，进度封顶后仍可供后续终审回补使用。

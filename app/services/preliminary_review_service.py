@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deepseek_preliminary_review import (
@@ -21,6 +22,7 @@ from app.models.project_upload_config import (
     ProjectUploadConfig,
 )
 from app.models.proof_record import ProofRecord, ProofReviewStatus
+from app.models.season import SeasonStatus
 from app.models.season_user import SeasonUser
 from app.models.season_user_project import SeasonUserProject
 from app.models.user import User
@@ -28,6 +30,7 @@ from app.models.project import Project
 from app.repositories.notification_repository import notification_repository
 from app.repositories.proof_record_repository import proof_record_repository
 from app.repositories.season_user_repository import season_user_repository
+from app.services.leaderboard_service import leaderboard_service
 from app.services.project_progress_service import project_progress_service
 
 
@@ -73,6 +76,102 @@ def build_preliminary_rejection_notification_fields(
 
 
 class PreliminaryReviewService:
+    async def review_pending_by_id(
+        self,
+        session: AsyncSession,
+        proof_record_id: int,
+    ) -> dict[str, float | int | str]:
+        """立即初审非未开始赛季的一条待审凭证，跳过定时等待。"""
+        record_with_season = (
+            await proof_record_repository.get_active_record_with_season(
+                session=session,
+                proof_record_id=proof_record_id,
+            )
+        )
+        if record_with_season is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="凭证不存在或已失效",
+            )
+
+        proof_record, season = record_with_season
+        if season.status == SeasonStatus.NOT_STARTED:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="凭证所属赛季尚未开始，不允许初审",
+            )
+        if proof_record.review_status != ProofReviewStatus.PENDING.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="凭证当前状态不是待初审",
+            )
+
+        pending_row = (
+            await proof_record_repository.get_pending_record_for_preliminary_review(
+                session=session,
+                proof_record_id=proof_record_id,
+            )
+        )
+        if pending_row is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="凭证缺少可用的初审规则或参与信息",
+            )
+
+        # 查询完成后释放只读事务，避免等待外部模型时长期占用数据库连接。
+        await session.commit()
+        try:
+            review_result = await self._evaluate_row(
+                session=session,
+                pending_row=pending_row,
+            )
+            applied = await self._persist_result(
+                session=session,
+                pending_row=pending_row,
+                review_result=review_result,
+            )
+        except DeepSeekPreliminaryReviewError as exc:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=str(exc),
+            ) from exc
+        except Exception:
+            await session.rollback()
+            raise
+
+        if not applied:
+            # 模型调用期间发生重传或其他审核时，条件更新会拒绝覆盖新状态。
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="凭证内容或审核状态已变化，请刷新后重试",
+            )
+
+        await session.refresh(proof_record)
+        response = {
+            "proof_record_id": proof_record_id,
+            "review_status": proof_record.review_status,
+            "review_comment": proof_record.review_comment or "",
+            "progress_delta": float(proof_record.progress_delta),
+            "increase": float(proof_record.increase),
+        }
+
+        if season.status == SeasonStatus.ACTIVE:
+            try:
+                # 激活赛季的审核结果应尽快反映到排行榜；刷新失败不回滚已提交的审核。
+                await leaderboard_service.refresh_current_season_snapshot(
+                    session=session,
+                )
+            except Exception:
+                await session.rollback()
+                logger.exception(
+                    "leaderboard refresh failed after immediate preliminary review: "
+                    "proof_record_id=%s",
+                    proof_record_id,
+                )
+
+        return response
+
     async def review_pending_current_season(
         self,
         session: AsyncSession,

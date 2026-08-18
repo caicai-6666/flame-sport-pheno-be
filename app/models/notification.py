@@ -91,7 +91,10 @@ class Notification(SQLModel, table=True):
             String(32),
             nullable=False,
             server_default=text("'pending'"),
-            comment="通知投递状态",
+            comment=(
+                "通知状态：pending待发送，processing发送中，accepted已受理，"
+                "delivered已送达，read已读，failed失败"
+            ),
         ),
     )
     notification_updated_at: datetime = Field(

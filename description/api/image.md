@@ -164,7 +164,7 @@ Authorization: auth_code
 
 该接口仅用于读取 `GET /flame/api/proof/current` 和 `GET /flame/api/proof/history` 返回的 `imageUrl`。后端会按 `proof_record.id`、有效状态、当前登录用户归属和赛季可见状态查询凭证，再根据所属赛季定位图片文件；不会信任客户端传入的文件名或赛季目录。
 
-客户端只能读取 `season.status = 1` 的进行中赛季和 `season.status = 3` 的已结束赛季凭证图片。未开始或结算中赛季的凭证不会通过客户端图片接口返回；管理端凭证图片接口不受该限制。
+客户端可以读取 `season.status = 1` 的进行中赛季、`status = 2` 的结算中赛季和 `status = 3` 的已结束赛季凭证图片，确保当前列表和历史列表中的 `imageUrl` 均可访问。未开始赛季的凭证不会通过客户端图片接口返回；管理端凭证图片接口不受该限制。
 
 成功响应示例：
 

@@ -27,6 +27,7 @@
 | 用户资料 | [用户资料业务说明](business/user_profile.md) | [User 接口](api/user.md) | [用户表](db/user.md)、[部门表](db/department.md) | `app/routers/user.py` |
 | 赛季与项目选择 | [赛季与项目选择流程](business/season_project_flow.md) | [Season 接口](api/season.md)、[Project 接口](api/project.md) | [赛季表](db/season.md)、[赛季用户表](db/season-user.md)、[赛季用户项目表](db/season-user-project.md) | `app/routers/season.py`、`app/routers/project.py` |
 | 凭证上传与查询 | [凭证上传业务说明](business/proof_upload.md) | [Proof 接口](api/proof.md) | [凭证记录表](db/proof-record.md)、[项目上传配置表](db/project-upload-config.md) | `app/routers/proof.py` |
+| 结算赛季补传 | [结算赛季凭证补传](business/supplement.md) | [补传接口](api/supplement.md) | [赛季补传资格表](db/season-supplement-eligibility.md)、[凭证记录表](db/proof-record.md) | `app/routers/supplement.py` |
 | 审核、通知、排行榜与积分 | [审核与积分说明](business/review_and_points.md)、[钉钉工作通知投递](business/notifications.md) | [Leaderboard 接口](api/leaderboard.md) | [用户通知表](db/notification.md)、[排行榜快照表](db/leaderboard-snapshot.md)、[积分流水表](db/point-record.md) | `app/core/preliminary_review_scheduler.py`、`app/core/notification_scheduler.py`、`app/routers/leaderboard.py` |
 | 积分商城 | [商城业务说明](business/shop.md) | [Shop 接口](api/shop.md) | [商品表](db/product.md)、[积分流水表](db/point-record.md) | `app/routers/shop.py` |
 | 用户建议 | [用户建议业务说明](business/suggestion.md) | [Suggestion 接口](api/suggestion.md) | [用户建议表](db/user-suggestion.md) | `app/routers/suggestion.py` |
@@ -52,6 +53,7 @@
 | [Season 接口](api/season.md) | 当前赛季和参与状态查询 |
 | [Shop 接口](api/shop.md) | 商品、积分与兑换 |
 | [Suggestion 接口](api/suggestion.md) | 用户建议提交 |
+| [补传接口](api/supplement.md) | 结算中赛季可补传凭证查询与补交 |
 | [User 接口](api/user.md) | 用户资料读取和更新 |
 
 ---
@@ -68,6 +70,7 @@
 | [钉钉工作通知投递](business/notifications.md) | 通用 Markdown、异步投递状态和失败重试 |
 | [赛季与项目选择流程](business/season_project_flow.md) | 赛季参与、项目锁定和挑战等级选择 |
 | [商城业务说明](business/shop.md) | 积分查询、商品展示和兑换规则 |
+| [结算赛季凭证补传](business/supplement.md) | 当前用户补传资格查询、凭证补交和资格消费规则 |
 | [用户建议业务说明](business/suggestion.md) | 建议提交规则和事务边界 |
 | [用户资料业务说明](business/user_profile.md) | 用户资料完整度和身高维护 |
 
@@ -92,6 +95,7 @@
 | [赛季表](db/season.md) | `season` |
 | [赛季用户表](db/season-user.md) | `season_user` |
 | [赛季用户项目表](db/season-user-project.md) | `season_user_project` |
+| [赛季补传资格表](db/season-supplement-eligibility.md) | `season_supplement_eligibility` |
 | [用户表](db/user.md) | `user` |
 | [用户建议表](db/user-suggestion.md) | `user_suggestion` |
 

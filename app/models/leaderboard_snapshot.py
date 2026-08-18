@@ -46,6 +46,6 @@ class LeaderboardSnapshot(SQLModel, table=True):
             INTEGER(unsigned=True),
             nullable=False,
             server_default=text("0"),
-            comment="当前赛季累计打卡次数",
+            comment="该赛季符合排行榜统计口径的有效打卡次数",
         ),
     )

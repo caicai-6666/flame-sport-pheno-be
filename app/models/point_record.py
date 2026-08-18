@@ -125,8 +125,8 @@ class PointRecord(SQLModel, table=True):
             nullable=False,
             server_default=text("'pending'"),
             comment=(
-                "礼品发放状态：pending待发放，distributed已发放，"
-                "rejected拒绝发放"
+                "商品兑换礼品发放状态，仅change_type=exchange时有效："
+                "pending待发放，distributed已发放，rejected拒绝发放"
             ),
         ),
     )

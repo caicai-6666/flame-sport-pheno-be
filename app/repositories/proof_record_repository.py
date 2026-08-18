@@ -19,6 +19,50 @@ from app.models.user import User
 
 
 class ProofRecordRepository:
+    async def get_pending_record_for_preliminary_review(
+        self,
+        session: AsyncSession,
+        proof_record_id: int,
+    ) -> tuple[
+        ProofRecord,
+        SeasonUser,
+        User,
+        Project,
+        ProjectRule,
+        ProjectUploadConfig,
+    ] | None:
+        """按主键查询一条可初审凭证，不限制其所属赛季状态。"""
+        result = await session.execute(
+            select(
+                ProofRecord,
+                SeasonUser,
+                User,
+                Project,
+                ProjectRule,
+                ProjectUploadConfig,
+            )
+            .join(SeasonUser, SeasonUser.id == ProofRecord.season_user_id)
+            .join(User, User.id == SeasonUser.user_id)
+            .join(Project, Project.id == ProofRecord.project_id)
+            .join(
+                ProjectRule,
+                and_(
+                    ProjectRule.project_id == ProofRecord.project_id,
+                    ProjectRule.level_id == SeasonUser.level_id,
+                    ProjectRule.status == 1,
+                ),
+            )
+            .join(
+                ProjectUploadConfig,
+                ProjectUploadConfig.id == ProofRecord.project_upload_config_id,
+            )
+            .where(ProofRecord.id == proof_record_id)
+            .where(SeasonUser.level_id.is_not(None))
+            .where(ProofRecord.status == 1)
+            .where(ProofRecord.review_status == ProofReviewStatus.PENDING.value)
+        )
+        return result.one_or_none()
+
     async def list_pending_current_season_for_preliminary_review(
         self,
         session: AsyncSession,
@@ -287,15 +331,19 @@ class ProofRecordRepository:
         session: AsyncSession,
         user_id: str,
     ) -> list[tuple[ProofRecord, Season, Project]]:
-        """查询用户已结束赛季的有效历史凭证，并附带赛季和项目信息。"""
+        """查询用户结算中或已结束赛季的有效凭证，并附带赛季和项目信息。"""
         result = await session.execute(
             select(ProofRecord, Season, Project)
             .join(SeasonUser, SeasonUser.id == ProofRecord.season_user_id)
             .join(Season, Season.id == SeasonUser.season_id)
             .join(Project, Project.id == ProofRecord.project_id)
             .where(SeasonUser.user_id == user_id)
-            # 结算中的赛季尚未定稿，只有已结束赛季进入客户端历史。
-            .where(Season.status == SeasonStatus.ENDED)
+            # 赛季离开进行中状态后即进入历史，便于用户查看结算进展。
+            .where(
+                Season.status.in_(
+                    (SeasonStatus.SETTLING, SeasonStatus.ENDED),
+                )
+            )
             .where(ProofRecord.status == 1)
             .order_by(
                 ProofRecord.proof_date.desc(),
@@ -342,10 +390,14 @@ class ProofRecordRepository:
             .where(ProofRecord.id == proof_record_id)
             .where(ProofRecord.status == 1)
             .where(SeasonUser.user_id == user_id)
-            # 客户端只能读取进行中或已结束赛季的图片，结算中由管理端处理。
+            # 历史列表包含结算中赛季，因此图片读取必须使用相同可见范围。
             .where(
                 Season.status.in_(
-                    (SeasonStatus.ACTIVE, SeasonStatus.ENDED),
+                    (
+                        SeasonStatus.ACTIVE,
+                        SeasonStatus.SETTLING,
+                        SeasonStatus.ENDED,
+                    ),
                 )
             )
         )

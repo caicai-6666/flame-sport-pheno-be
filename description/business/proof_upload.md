@@ -2,7 +2,7 @@
 
 ## 业务目标
 
-用户正式参与赛季后，可以针对已锁定项目上传运动凭证。凭证用于赛季期间展示、排行榜统计、管理员持续终审和赛季结束后的积分结算。普通上传和补传使用同一上传流程，区别仅在于用户选择的运动日期。
+用户正式参与赛季后，可以针对已锁定项目上传运动凭证。凭证用于赛季期间展示、排行榜统计、管理员持续终审和赛季结束后的积分结算。进行中赛季使用普通上传接口；结算中赛季只能通过补传资格绑定的原凭证进行补交，具体规则参见[结算赛季凭证补传](supplement.md)。
 
 当前业务实现位于：
 
@@ -154,13 +154,13 @@ proof_record.status = 1
 
 `GET /flame/api/proof/history` 基于当前登录用户 ID 查询过往赛季历史凭证，并排除当前激活赛季的上传记录。
 
-`current` 每次请求都会从数据库读取当前激活赛季。`history` 不依赖当前赛季，只返回 `season.status = 3` 的已结束赛季凭证；`status = 0` 的未开始赛季和 `status = 2` 的结算中赛季不会出现在客户端历史记录中。
+`current` 每次请求都会从数据库读取当前激活赛季。`history` 不依赖当前赛季，返回 `season.status IN (2, 3)` 的结算中或已结束赛季凭证；`status = 0` 的未开始赛季和 `status = 1` 的当前激活赛季不会出现在客户端历史记录中。
 
 查询关系：
 
 ```text
 season_user.user_id = 当前登录用户 ID
-season.status = 3
+season.status IN (2, 3)
 proof_record.season_user_id = season_user.id
 season_user.season_id = season.id
 proof_record.project_id = project.id

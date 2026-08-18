@@ -156,7 +156,7 @@ proof_record.id DESC
 
 ## GET `/flame/api/proof/history`
 
-该接口不依赖当前激活赛季，只返回 `season.status = 3` 的已结束赛季凭证。`status = 0` 的未开始赛季和 `status = 2` 的结算中赛季不会出现在客户端历史记录中，因此只有结算完成并切换为已结束的赛季才会对客户端展示。
+该接口不依赖当前激活赛季，返回 `season.status IN (2, 3)` 的结算中或已结束赛季凭证。赛季离开进行中状态后即可进入客户端历史，便于用户查看结算期间的审核变化；`status = 0` 的未开始赛季和 `status = 1` 的当前激活赛季不会出现在历史记录中。
 
 请求示例：
 
@@ -199,7 +199,7 @@ Authorization: auth_code
 
 ```text
 season_user.user_id = 当前登录用户 ID
-season.status = 3
+season.status IN (2, 3)
 proof_record.season_user_id = season_user.id
 proof_record.project_id = project.id
 season_user.season_id = season.id

@@ -13,9 +13,10 @@ from app.core.storage import (
     convert_proof_record_image_to_webp,
     save_proof_record_image,
 )
+from app.models.project import Project
 from app.models.project_upload_config import ProjectUploadConfig
-from app.models.proof_record import ProofReviewStatus
-from app.models.season import SeasonStatus
+from app.models.proof_record import ProofRecord, ProofReviewStatus
+from app.models.season import Season, SeasonStatus
 from app.models.season_user_project import SeasonUserProject
 from app.repositories.project_repository import project_repository
 from app.repositories.proof_record_repository import proof_record_repository
@@ -88,9 +89,9 @@ class ProofService:
         except Exception:
             await session.rollback()
             raise
-        normalized_record_type = self._normalize_record_type(record_type)
-        normalized_note = self._normalize_note(note)
-        self._ensure_supported_image_media_type(image)
+        normalized_record_type = self.normalize_record_type(record_type)
+        normalized_note = self.normalize_note(note)
+        self.ensure_supported_image_media_type(image)
 
         season = await season_repository.get_by_id(
             session=session,
@@ -106,7 +107,7 @@ class ProofService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="赛季未激活，无法上传凭证",
             )
-        self._validate_proof_date(season=season, proof_date=proof_date)
+        self.validate_proof_date(season=season, proof_date=proof_date)
 
         season_user = await season_user_repository.get_by_season_id_and_user_id(
             session=session,
@@ -219,16 +220,16 @@ class ProofService:
         except HTTPException:
             await session.rollback()
             if saved_new_image:
-                self._remove_file_if_exists(image_path)
+                self.remove_file_if_exists(image_path)
             raise
         except Exception:
             await session.rollback()
             if saved_new_image:
-                self._remove_file_if_exists(image_path)
+                self.remove_file_if_exists(image_path)
             raise
 
         if old_image_path is not None:
-            self._remove_file_if_exists(old_image_path)
+            self.remove_file_if_exists(old_image_path)
 
         return {
             "created_at": uploaded_at.isoformat(timespec="seconds"),
@@ -246,20 +247,11 @@ class ProofService:
             user_id=user_id,
         )
         return [
-            {
-                "seasonName": season.name,
-                "projectName": project.name,
-                "reviewStatus": proof_record.review_status,
-                "reviewComment": proof_record.review_comment or "",
-                "imageName": self._build_display_proof_image_name(
-                    proof_record.image_url,
-                ),
-                "imageUrl": self._build_proof_record_image_url_for_response(
-                    proof_record.id,
-                ),
-                "proofDate": proof_record.proof_date.isoformat(),
-                "createdAt": proof_record.created_at.isoformat(timespec="seconds"),
-            }
+            self.build_proof_record_list_item(
+                proof_record=proof_record,
+                season=season,
+                project=project,
+            )
             for proof_record, season, project in history_records
         ]
 
@@ -281,24 +273,41 @@ class ProofService:
             current_season_id=current_season.id,
         )
         return [
-            {
-                "seasonName": season.name,
-                "projectName": project.name,
-                "reviewStatus": proof_record.review_status,
-                # 初审任务后续会写入理由，当前赛季列表需让用户看到失败原因。
-                "reviewComment": proof_record.review_comment or "",
-                "note": proof_record.note or "",
-                "imageName": self._build_display_proof_image_name(
-                    proof_record.image_url,
-                ),
-                "imageUrl": self._build_proof_record_image_url_for_response(
-                    proof_record.id,
-                ),
-                "proofDate": proof_record.proof_date.isoformat(),
-                "createdAt": proof_record.created_at.isoformat(timespec="seconds"),
-            }
+            self.build_proof_record_list_item(
+                proof_record=proof_record,
+                season=season,
+                project=project,
+                include_note=True,
+            )
             for proof_record, season, project in current_records
         ]
+
+    def build_proof_record_list_item(
+        self,
+        proof_record: ProofRecord,
+        season: Season,
+        project: Project,
+        include_note: bool = False,
+    ) -> dict[str, str]:
+        """构造当前、历史和补传列表共用的凭证展示字段。"""
+        item = {
+            "seasonName": season.name,
+            "projectName": project.name,
+            "reviewStatus": proof_record.review_status,
+            "reviewComment": proof_record.review_comment or "",
+            "imageName": self._build_display_proof_image_name(
+                proof_record.image_url,
+            ),
+            "imageUrl": self._build_proof_record_image_url_for_response(
+                proof_record.id,
+            ),
+            "proofDate": proof_record.proof_date.isoformat(),
+            "createdAt": proof_record.created_at.isoformat(timespec="seconds"),
+        }
+        if include_note:
+            # 当前与补传页面需要回显用户原备注，历史列表保持原有响应契约。
+            item["note"] = proof_record.note or ""
+        return item
 
     async def _create_or_update_proof_record_for_date(
         self,
@@ -333,7 +342,32 @@ class ProofService:
             )
             return None
 
-        old_image_path = self._resolve_existing_proof_image_path(
+        return await self.replace_existing_proof_record(
+            session=session,
+            proof_record=proof_record,
+            project_upload_config_id=project_upload_config_id,
+            image_url=image_url,
+            note=note,
+            proof_date=proof_date,
+            uploaded_at=uploaded_at,
+            season_id=season_id,
+            project_lock=project_lock,
+        )
+
+    async def replace_existing_proof_record(
+        self,
+        session: AsyncSession,
+        proof_record: ProofRecord,
+        project_upload_config_id: int,
+        image_url: str,
+        note: str | None,
+        proof_date: date,
+        uploaded_at: datetime,
+        season_id: int,
+        project_lock: SeasonUserProject,
+    ) -> Path | None:
+        """用新提交内容原位覆盖凭证，并释放旧版本已经占用的项目进度。"""
+        old_image_path = self.resolve_existing_proof_image_path(
             old_image_url=proof_record.image_url,
             new_image_url=image_url,
             season_id=season_id,
@@ -353,14 +387,14 @@ class ProofService:
         await project_progress_service.release_and_redistribute(
             session=session,
             project_lock=project_lock,
-            season_user_id=season_user_id,
-            project_id=project_id,
+            season_user_id=proof_record.season_user_id,
+            project_id=proof_record.project_id,
             released_increase=released_increase,
             excluded_proof_record_ids=[proof_record.id] if proof_record.id else None,
         )
         return old_image_path
 
-    def _validate_proof_date(self, season, proof_date: date) -> None:
+    def validate_proof_date(self, season: Season, proof_date: date) -> None:
         """服务端校验用户选择的运动日期，避免绕过前端日期控件。"""
         if proof_date > datetime.now().date():
             raise HTTPException(
@@ -413,7 +447,7 @@ class ProofService:
             [dict(upload_config_item) for upload_config_item in upload_config_items],
         )
 
-    def _normalize_record_type(self, record_type: str | None) -> str | None:
+    def normalize_record_type(self, record_type: str | None) -> str | None:
         """规范化可选凭证类型，仅用于兼容旧前端字段并做一致性校验。"""
         if record_type is None:
             return None
@@ -428,7 +462,7 @@ class ProofService:
             )
         return normalized_record_type
 
-    def _normalize_note(self, note: str) -> str:
+    def normalize_note(self, note: str) -> str:
         """规范化并确保用户提供可供初审解析的运动指标说明。"""
         normalized_note = note.strip()
         if not normalized_note:
@@ -444,7 +478,7 @@ class ProofService:
             )
         return normalized_note
 
-    def _ensure_supported_image_media_type(self, image: UploadFile) -> None:
+    def ensure_supported_image_media_type(self, image: UploadFile) -> None:
         """校验上传媒体类型；有效内容随后统一重编码为 WebP。"""
         if image.content_type not in {
             "image/jpeg",
@@ -478,7 +512,7 @@ class ProofService:
             return ""
         return f"/flame/api/image/proof_record/{proof_record_id}"
 
-    def _resolve_existing_proof_image_path(
+    def resolve_existing_proof_image_path(
         self,
         old_image_url: str,
         new_image_url: str,
@@ -509,7 +543,7 @@ class ProofService:
                 detail="凭证图片路径非法",
             )
 
-    def _remove_file_if_exists(self, file_path: Path) -> None:
+    def remove_file_if_exists(self, file_path: Path) -> None:
         """删除指定文件；文件不存在时忽略。"""
         try:
             if file_path.is_file():

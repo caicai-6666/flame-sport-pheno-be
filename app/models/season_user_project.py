@@ -73,7 +73,7 @@ class SeasonUserProject(SQLModel, table=True):
             Numeric(5, 4),
             nullable=False,
             server_default=text("0.0000"),
-            comment="本赛季项目完成进度：0未完成，1已完成",
+            comment="本赛季项目完成进度，取值0.0000～1.0000",
         ),
     )
     status: int = Field(

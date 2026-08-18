@@ -2,7 +2,7 @@
 
 ## 用途与访问边界
 
-`admin` 路由专门服务管理端，后续用于提供用户头像、运动凭证和审核所需的数据。它注册在现有后端应用中：
+`admin` 路由专门服务管理端，用于提供用户头像、运动凭证、资源写入和单条凭证立即初审能力。它注册在现有后端应用中：
 
 ```text
 main:app
@@ -39,6 +39,7 @@ http://backend:8000/flame/api/admin
 | `GET` | `/flame/api/admin/product` | 根据奖品图片地址读取奖品图片 |
 | `POST` | `/flame/api/admin/product/replace` | 用新奖品图片地址取代旧地址 |
 | `GET` | `/flame/api/admin/proof_record/{proof_record_id}` | 根据凭证记录读取运动凭证图片 |
+| `POST` | `/flame/api/admin/proof_record/{proof_record_id}/preliminary-review` | 按凭证记录立即执行文本初审 |
 
 ---
 
@@ -337,3 +338,64 @@ Cache-Control: private, no-store
 | `404` | 凭证缺少有效赛季主键 | `凭证所属赛季不存在` |
 | `400` | 凭证图片路径逃逸出凭证目录 | `凭证图片路径非法` |
 | `404` | 凭证图片文件不存在 | `凭证图片文件不存在` |
+
+---
+
+## POST `/flame/api/admin/proof_record/{proof_record_id}/preliminary-review`
+
+按凭证记录 ID 立即执行与定时任务相同的 DeepSeek 文本初审，并同步写入审核结果、项目进度和初审失败通知。该接口不读取凭证图片，也不要求调用方传递审核结论。
+
+请求示例：
+
+```http
+POST /flame/api/admin/proof_record/115/preliminary-review
+```
+
+处理条件：
+
+```text
+proof_record.id = proof_record_id
+proof_record.status = 1
+proof_record.review_status = pending
+season_user.level_id IS NOT NULL
+存在该用户等级与凭证项目对应的启用 project_rule
+存在凭证关联的 project_upload_config
+```
+
+该接口按 ID 处理单条凭证，允许激活、结算中或已结束赛季，不检查 `LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS`。因此管理端可以补审过往赛季遗留的 `pending` 凭证；初审已经完成的记录不会重复审核，未开始赛季仍保持不可审核。定时任务的自动扫描范围不变，仍只处理当前激活赛季。
+
+成功响应：
+
+```json
+{
+  "proof_record_id": 115,
+  "review_status": "preliminary_approved",
+  "review_comment": "本次运动符合单次要求。",
+  "progress_delta": 0.1,
+  "increase": 0.1
+}
+```
+
+初审失败时同样返回 `200 OK`，其中 `review_status` 为 `preliminary_rejected`，并按统一规则创建待发送通知。只有接口本身无法完成初审时才返回错误。
+
+并发处理规则：
+
+1. 调用模型前释放只读数据库事务，避免外部请求期间长期占用连接。
+2. 写回时同时校验凭证仍为 `pending`，且 `created_at` 和 `note` 未变化。
+3. 用户在模型调用期间重传，或其他任务先完成初审时，本次结果不会覆盖新内容。
+4. 激活赛季的结果写入后尝试立即刷新排行榜；排行榜刷新失败不会回滚已经提交的初审结果。
+
+错误响应：
+
+| 状态码 | 场景 | `detail` |
+| --- | --- | --- |
+| `404` | 凭证不存在或已失效 | `凭证不存在或已失效` |
+| `409` | 凭证所属赛季尚未开始 | `凭证所属赛季尚未开始，不允许初审` |
+| `409` | 凭证已不再处于待初审状态 | `凭证当前状态不是待初审` |
+| `409` | 缺少正式参与信息、启用规则或上传配置 | `凭证缺少可用的初审规则或参与信息` |
+| `409` | 模型调用期间凭证被重传或由其他任务完成初审 | `凭证内容或审核状态已变化，请刷新后重试` |
+| `502` | DeepSeek 请求失败或返回内容不符合初审契约 | 对应的模型调用错误 |
+
+> **警告**
+>
+> 该接口会修改审核状态、项目进度，并可能创建通知。调用方必须遵守本路由的 Docker 内网访问边界；在开放到其他网络前，应先补充真实的管理端鉴权。

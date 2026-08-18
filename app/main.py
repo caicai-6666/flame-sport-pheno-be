@@ -36,6 +36,7 @@ from app.routers import (
     proof,
     season,
     shop,
+    supplement,
     suggestion,
     user,
 )
@@ -92,6 +93,7 @@ def create_app() -> FastAPI:
     application.include_router(proof.router, prefix=API_PREFIX)
     application.include_router(season.router, prefix=API_PREFIX)
     application.include_router(shop.router, prefix=API_PREFIX)
+    application.include_router(supplement.router, prefix=API_PREFIX)
     application.include_router(suggestion.router, prefix=API_PREFIX)
     application.include_router(user.router, prefix=API_PREFIX)
     return application
