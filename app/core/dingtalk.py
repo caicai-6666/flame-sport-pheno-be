@@ -189,9 +189,9 @@ class DingTalkClient:
             field_name="status",
         )
         progress = self._non_negative_integer(
-            progress_data.get("progress"),
+            progress_data.get("progress_in_percent", progress_data.get("progress")),
             operation_name="钉钉工作通知进度查询",
-            field_name="progress",
+            field_name="progress_in_percent",
         )
         if status not in {0, 1, 2} or progress > 100:
             raise DingTalkRequestError("钉钉工作通知进度响应格式错误")
