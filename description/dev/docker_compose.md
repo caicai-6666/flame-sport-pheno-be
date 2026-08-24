@@ -70,6 +70,7 @@ Compose 需要把以下赛季保护期和工作通知配置显式注入后端容
 ```yaml
 environment:
   ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS: ${ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS:-24}
+  PROGRESS_COMPLETION_SNAP_THRESHOLD: ${PROGRESS_COMPLETION_SNAP_THRESHOLD:-0.0001}
   DINGTALK_AGENT_ID: ${DINGTALK_AGENT_ID:-}
   DINGTALK_NOTIFICATION_CHECK_INTERVAL_SECONDS: ${DINGTALK_NOTIFICATION_CHECK_INTERVAL_SECONDS:-60}
 ```
@@ -77,6 +78,8 @@ environment:
 缺少 `DINGTALK_AGENT_ID` 时，登录相关钉钉能力不受影响，但工作通知投递任务不会启动。
 
 `ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS` 同时供管理端和客户后端读取。客户后端按 `Asia/Shanghai` 的赛季开始日 `00:00` 起算，并在保护期内拒绝项目锁定、等级锁定、凭证上传、礼品兑换和首次用户初始化；配置为 `0` 时不冻结。修改该配置后需要重建或重启后端容器才能生效。
+
+`PROGRESS_COMPLETION_SNAP_THRESHOLD` 仅供客户后端读取，默认 `0.0001`。当一条有效凭证写入后的项目进度距 `1` 不超过该值时，系统自动补足完成进度；配置为 `0` 可关闭，最大值固定为 `0.0001`。修改后同样需要重建或重启 `backend` 容器。
 
 ---
 

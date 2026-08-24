@@ -347,6 +347,13 @@ class PreliminaryReviewService:
                         proof_record.id,
                     ],
                 )
+            # 重传会先释放旧版本贡献，必须以释放后的实际剩余空间判断舍入尾差。
+            normalized_progress_delta = (
+                project_progress_service.align_progress_delta_with_completion(
+                    project_lock=project_lock,
+                    progress_delta=normalized_progress_delta,
+                )
+            )
             applied_increase = project_progress_service.allocate_progress(
                 project_lock=project_lock,
                 progress_delta=normalized_progress_delta,
@@ -359,6 +366,7 @@ class PreliminaryReviewService:
                     expected_created_at=proof_record.created_at,
                     expected_note=proof_record.note,
                     increase=applied_increase,
+                    progress_delta=normalized_progress_delta,
                 )
             )
             if not stored_increase:

@@ -121,9 +121,12 @@ DEEPSEEK_MODEL=deepseek-v4-flash
 LLM_PRELIMINARY_REVIEW_ENABLED=true
 LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS=900
 LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS=300
+PROGRESS_COMPLETION_SNAP_THRESHOLD=0.0001
 ```
 
 `LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS` 必须大于 `0`，默认每 15 分钟扫描一次；`LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS` 默认 `300`，仅审核上传满 5 分钟的待审凭证，为用户重传留出窗口。启用前应确认 `DEEPSEEK_API_KEY` 有效；生产任务会以 DeepSeek V4 非思考模式请求 JSON Output，并为偶发的空内容或截断 JSON 自动重试最多 3 次。任务会向 DeepSeek 发送用户填写的 `note`，减重挑战月初记录还会发送身高，月末记录会发送月初审核摘要。不会发送凭证图片、用户 ID、赛季 ID、挑战等级 ID 或其他等级规则。
+
+`PROGRESS_COMPLETION_SNAP_THRESHOLD` 控制进度累计后与 `1` 的最大自动补足差额，默认 `0.0001`，可设为 `0` 关闭。该值不得大于数据库四位小数精度的最小单位 `0.0001`，避免提前判定项目完成。
 
 随后仅运行该评测文件（用命令临时启用，避免把开关长期留在 `.env` 中）：
 

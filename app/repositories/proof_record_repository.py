@@ -184,8 +184,12 @@ class ProofRecordRepository:
         expected_created_at: datetime,
         expected_note: str | None,
         increase: Decimal,
+        progress_delta: Decimal | None = None,
     ) -> bool:
-        """记录本条凭证当前实际分配到项目进度条的贡献。"""
+        """原子记录规范化原始增量和实际分配到进度条的贡献。"""
+        values: dict[str, Decimal] = {"increase": increase}
+        if progress_delta is not None:
+            values["progress_delta"] = progress_delta
         statement = (
             update(ProofRecord)
             .where(ProofRecord.id == proof_record_id)
@@ -196,7 +200,7 @@ class ProofRecordRepository:
             )
             .where(ProofRecord.created_at == expected_created_at)
             .where(ProofRecord.note == expected_note)
-            .values(increase=increase)
+            .values(**values)
         )
         result = await session.execute(statement)
         return bool(result.rowcount)

@@ -4,6 +4,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.project_upload_config import (
     MONTH_END_RECORD_TYPE,
     MONTH_START_RECORD_TYPE,
@@ -59,6 +60,34 @@ class ProjectProgressService:
             project_lock.completion_progress + increase
         ).quantize(PROGRESS_PRECISION, rounding=ROUND_HALF_UP)
         return increase
+
+    def align_progress_delta_with_completion(
+        self,
+        project_lock: SeasonUserProject,
+        progress_delta: Decimal,
+    ) -> Decimal:
+        """修正分数拆分的舍入尾差，确保完成进度可精确达到 1。"""
+        if progress_delta <= MIN_PROGRESS:
+            return progress_delta
+
+        prospective_progress = (
+            project_lock.completion_progress + progress_delta
+        ).quantize(PROGRESS_PRECISION, rounding=ROUND_HALF_UP)
+        remaining = (MAX_PROGRESS - prospective_progress).quantize(
+            PROGRESS_PRECISION,
+            rounding=ROUND_HALF_UP,
+        )
+        if (
+            MIN_PROGRESS < remaining
+            <= settings.PROGRESS_COMPLETION_SNAP_THRESHOLD
+        ):
+            # 例如三次 1/3 被量化为 0.3333 时，最后一次补足 0.0001，
+            # 使项目总进度与各凭证的实际贡献始终可逆。
+            return (progress_delta + remaining).quantize(
+                PROGRESS_PRECISION,
+                rounding=ROUND_HALF_UP,
+            )
+        return progress_delta
 
     async def release_and_redistribute(
         self,

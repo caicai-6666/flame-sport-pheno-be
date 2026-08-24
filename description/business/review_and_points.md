@@ -46,7 +46,7 @@ proof_record.created_at <= 本轮扫描时间 - LLM_PRELIMINARY_REVIEW_MIN_AGE_S
 
 `season_user.level_id` 与 `proof_record.project_id` 共同定位唯一的启用 `project_rule`。等级 ID、赛季 ID、用户 ID、图片路径和项目其他等级规则都不会发送给模型。模型仅接收项目名称、凭证类型、该条规则、规则备注和用户 `note`；减重挑战的月初记录额外发送用户身高，月末记录额外发送同赛季最早通过月初记录的审核意见。
 
-模型返回 `reviewComment`、`reviewStatus` 和 `progressDelta`。初审通过时，原始 `progressDelta` 保存到 `proof_record.progress_delta`，经过进度条上限分配后实际生效的部分保存到 `proof_record.increase`。普通项目在同一事务内累加 `season_user_project.completion_progress` 并封顶到 `1`；减重挑战月初通过时进度保持 `0`，月末通过时直接设为 `1`。
+模型返回 `reviewComment`、`reviewStatus` 和 `progressDelta`。初审通过时，规范化后的 `progressDelta` 保存到 `proof_record.progress_delta`，经过进度条上限分配后实际生效的部分保存到 `proof_record.increase`。普通项目在同一事务内累加 `season_user_project.completion_progress` 并封顶到 `1`；若正向增量累计后距离 `1` 只差一个最小精度单位 `0.0001`，系统会将该条规范化增量补足，避免如三次 `0.3333` 累计为 `0.9999`。减重挑战月初通过时进度保持 `0`，月末通过时直接设为 `1`。
 
 初审失败时，客户端后端在同一事务中创建标题为“运动凭证初审结果”的 `pending` 通知。通知依次保存审核结果、运动项目、凭证日期和审核意见；初审通过不创建通知。通知写入失败时初审结论一并回滚，凭证保持 `pending` 等待后续任务重试。
 

@@ -1,3 +1,4 @@
+from decimal import Decimal
 from pathlib import Path
 from typing import Literal
 
@@ -48,6 +49,12 @@ class Settings(BaseSettings):
     LLM_PRELIMINARY_REVIEW_ENABLED: bool = False
     LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS: int = 900
     LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS: int = 300
+    # 仅补偿数据库最小精度内的累计尾差；0 表示关闭自动补足。
+    PROGRESS_COMPLETION_SNAP_THRESHOLD: Decimal = Field(
+        default=Decimal("0.0001"),
+        ge=Decimal("0"),
+        le=Decimal("0.0001"),
+    )
     SEASON_PARTICIPATION_ALLOWED_DAYS: int = 7
     # 赛季开始后的配置保护期内暂停客户业务写入，零表示不冻结。
     ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS: int = Field(default=24, ge=0)
