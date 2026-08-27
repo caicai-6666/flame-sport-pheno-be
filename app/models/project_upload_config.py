@@ -3,7 +3,7 @@ from sqlalchemy.dialects.mysql import BIGINT, INTEGER, TINYINT
 from sqlmodel import Field, SQLModel
 
 
-# 上传配置的 record_type 同时表达减重挑战的月度审核阶段。
+# 上传配置的 record_type 同时表达可供不同项目复用的月度审核阶段。
 MONTH_START_RECORD_TYPE = "月初记录"
 MONTH_END_RECORD_TYPE = "月末记录"
 

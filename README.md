@@ -10,12 +10,12 @@
 
 | 业务模块 | 已实现能力 |
 | --- | --- |
-| 登录与用户 | 钉钉企业内部 H5 免登、开发模式本地登录、首次用户与部门初始化、认证缓存、资料完整度检查和身高维护 |
+| 登录与用户 | 钉钉企业内部 H5 免登、开发模式本地登录、首次用户与部门初始化及认证缓存 |
 | 赛季参与 | 当前赛季查询、报名期限判断、项目锁定、统一挑战等级锁定和项目完成进度查询 |
 | 凭证管理 | 上传配置查询、JPEG/PNG/WebP 凭证上传、同项目同运动日期重传、当前与历史记录查询、归属校验和 WebP 存储 |
 | 文本初审 | DeepSeek 定时初审、过往赛季待审凭证的管理端立即初审、进度分配与回补、初审失败通知创建 |
 | 结算期补传 | 查询结算中赛季的有效补传资格，按原凭证补交图片与备注，并在事务内消费资格 |
-| 排行榜 | 定时生成当前赛季排行榜快照，统计有效初审或终审通过凭证，并支持减重挑战特殊口径 |
+| 排行榜 | 定时生成当前赛季排行榜快照，统计有效初审或终审通过凭证，并支持通用月初、月末阶段型项目口径 |
 | 积分商城 | 商品查询、用户积分流水查询、并发安全的积分兑换和待发放状态写入 |
 | 通知与建议 | 钉钉 Markdown 工作通知投递、结果检查、失败重试，以及用户建议提交 |
 | 图片资源 | 头像、项目图标、商品图片、运动凭证和固定活动海报的安全读取、转换与本地持久化 |
@@ -24,8 +24,7 @@
 
 ```mermaid
 flowchart LR
-    login[钉钉免登] --> profile[补充用户资料]
-    profile --> season[获取进行中赛季]
+    login[钉钉免登] --> season[获取进行中赛季]
     season --> project[锁定项目与挑战等级]
     project --> proof[上传运动凭证]
     proof --> review[文本初审]
@@ -144,7 +143,7 @@ MySQL 容器和完整 Compose 环境分别参见 [MySQL Docker 说明](descripti
 | 排行榜 | `LEADERBOARD_REFRESH_ENABLED`、`LEADERBOARD_REFRESH_ON_STARTUP`、`LEADERBOARD_REFRESH_INTERVAL_SECONDS` |
 | 图片缓存 | `IMAGE_CACHE_MAX_AGE_SECONDS` |
 
-`ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS` 按 `Asia/Shanghai` 的赛季开始日 `00:00` 起算。保护期内会拒绝项目锁定、等级锁定、普通凭证上传、结算期补传、商品兑换和首次用户初始化；身高维护和建议提交仍然允许。
+`ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS` 按 `Asia/Shanghai` 的赛季开始日 `00:00` 起算。保护期内会拒绝项目锁定、等级锁定、普通凭证上传、结算期补传、商品兑换和首次用户初始化；建议提交仍然允许。
 
 Docker 镜像不会复制仓库 `.env`，生产配置必须由 Compose 或运行环境显式注入。不得提交真实数据库密码、钉钉密钥或 DeepSeek API Key。
 
@@ -160,8 +159,8 @@ Authorization: auth_code
 
 | 路由 | 主要用途 | 接口文档 |
 | --- | --- | --- |
-| `/auth` | 登录、认证缓存和资料完整度检查 | [鉴权接口](description/api/auth.md) |
-| `/user` | 用户身高资料维护 | [用户接口](description/api/user.md) |
+| `/auth` | 登录和认证缓存 | [鉴权接口](description/api/auth.md) |
+| `/user` | 用户子路由存活校验 | [用户接口](description/api/user.md) |
 | `/season` | 当前赛季与参与状态 | [赛季接口](description/api/season.md) |
 | `/project` | 项目、规则、锁定、等级和完成进度 | [项目接口](description/api/project.md) |
 | `/proof` | 上传配置、凭证上传、当前与历史记录 | [凭证接口](description/api/proof.md) |

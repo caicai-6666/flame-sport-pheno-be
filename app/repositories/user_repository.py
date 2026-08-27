@@ -19,16 +19,6 @@ class UserRepository:
         )
         return result.scalar_one_or_none()
 
-    async def update_height_cm(
-        self,
-        session: AsyncSession,
-        user: User,
-    ) -> User:
-        """更新用户资料中的身高字段。"""
-        session.add(user)
-        await session.flush()
-        return user
-
     async def create(self, session: AsyncSession, user: User) -> User:
         """创建首次登录时初始化的用户。"""
         session.add(user)

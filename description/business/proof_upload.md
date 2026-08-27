@@ -139,7 +139,7 @@ review_comment = NULL
 ## 历史凭证
 
 `GET /flame/api/proof/current` 基于当前登录用户 ID 查询当前激活赛季凭证，并返回 `proofDate`，供前端标识已上传日期和“重新上传”入口。
-该接口返回用户上传备注 `note` 和审核意见 `reviewComment`。后者用于展示未来初审任务输出的通过依据或失败原因；未审核或未填写时返回空字符串。
+该接口返回用户上传备注 `note`，并同时返回 `preliminaryReviewComment` 和 `finalReviewComment`，分别用于展示初审与终审意见。既有 `reviewComment` 继续按当前审核阶段选择来源：初审状态读取 `preliminary_review_comment`，终审状态读取终审专用的 `review_comment`；待审核或对应意见未填写时返回空字符串。
 
 查询关系：
 

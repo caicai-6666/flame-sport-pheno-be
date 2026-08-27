@@ -110,6 +110,8 @@ Authorization: auth_code
     "projectName": "健身",
     "reviewStatus": "pending",
     "reviewComment": "",
+    "preliminaryReviewComment": "",
+    "finalReviewComment": "",
     "note": "力量训练 45 分钟，包含深蹲、卧推和拉伸。",
     "imageName": "健身.webp",
     "imageUrl": "/flame/api/image/proof_record/18",
@@ -126,7 +128,9 @@ Authorization: auth_code
 | `seasonName` | `string` | 赛季名称，对应 `season.name` |
 | `projectName` | `string` | 项目名称，对应 `project.name` |
 | `reviewStatus` | `string` | 审核状态，取值见下方“审核状态取值” |
-| `reviewComment` | `string` | 审核意见；初审任务后可返回通过依据或失败原因，未填写时返回空字符串 |
+| `reviewComment` | `string` | 兼容字段，返回当前审核阶段的意见；待审核或未填写时返回空字符串 |
+| `preliminaryReviewComment` | `string` | 大模型初审意见，对应 `preliminary_review_comment`；为空时返回空字符串 |
+| `finalReviewComment` | `string` | 管理员终审意见，对应 `review_comment`；为空时返回空字符串 |
 | `note` | `string` | 用户上传备注，对应 `proof_record.note`；为空时返回空字符串 |
 | `imageName` | `string` | 凭证文件名，只保留 `{上传文件主名}.webp`，不带系统生成前缀 |
 | `imageUrl` | `string` | 当前用户可读取的凭证图片地址；请求时仍需携带 `Authorization` |
@@ -174,6 +178,8 @@ Authorization: auth_code
     "projectName": "健身",
     "reviewStatus": "approved",
     "reviewComment": "审核通过：健身凭证清晰，训练记录符合本项目打卡要求。",
+    "preliminaryReviewComment": "单次训练时长达标。",
+    "finalReviewComment": "审核通过：健身凭证清晰，训练记录符合本项目打卡要求。",
     "imageName": "健身1.webp",
     "imageUrl": "/flame/api/image/proof_record/9",
     "proofDate": "2026-06-01",
@@ -189,7 +195,9 @@ Authorization: auth_code
 | `seasonName` | `string` | 赛季名称，对应 `season.name` |
 | `projectName` | `string` | 项目名称，对应 `project.name` |
 | `reviewStatus` | `string` | 审核状态，取值见下方“审核状态取值” |
-| `reviewComment` | `string` | 审核意见，对应 `proof_record.review_comment`；为空时返回空字符串 |
+| `reviewComment` | `string` | 当前审核阶段的意见；初审状态读取 `preliminary_review_comment`，终审状态读取 `review_comment`，待审核或为空时返回空字符串 |
+| `preliminaryReviewComment` | `string` | 大模型初审意见；记录进入终审状态后仍保留，历史数据未保存时返回空字符串 |
+| `finalReviewComment` | `string` | 管理员终审意见；尚未终审或未填写时返回空字符串 |
 | `imageName` | `string` | 凭证文件名，只保留 `{上传文件主名}.webp`，不带系统生成前缀 |
 | `imageUrl` | `string` | 当前用户可读取的凭证图片地址；请求时仍需携带 `Authorization` |
 | `proofDate` | `string` | 凭证对应的实际运动日期，对应 `proof_record.proof_date`，格式 `YYYY-MM-DD` |
@@ -281,9 +289,12 @@ proof_date
 created_at
 review_status = pending
 review_comment = NULL
+preliminary_review_comment = NULL
 ```
 
-重传后的 `pending` 表示待初审；此前的初审结果和审核意见会被清除。
+重传后的 `pending` 表示待初审；此前的初审结果、当前审核意见和独立初审意见都会被清除。
+
+响应中的 `reviewComment` 保持既有字段名，但按审核阶段选择来源：`preliminary_approved`、`preliminary_rejected` 返回 `preliminary_review_comment`；`approved`、`rejected` 返回终审专用的 `review_comment`；`pending` 返回空字符串。`preliminaryReviewComment` 和 `finalReviewComment` 则始终分别映射两个数据库字段，供客户端同时展示初审与终审意见。
 
 重传时会先释放旧版本的实际进度贡献，并将空缺回补给同项目下尚未完全分配原始增量的其他有效通过凭证。重传记录的原始增量和实际贡献会清零；新版本初审通过后再从剩余进度空间中分配贡献。
 

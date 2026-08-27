@@ -44,7 +44,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [Admin 接口](api/admin.md) | Docker 内部管理端接口及资源读取能力 |
-| [Auth 接口](api/auth.md) | 登录、认证缓存与资料完整度检查 |
+| [Auth 接口](api/auth.md) | 登录与认证缓存 |
 | [Health 接口](api/health.md) | 服务健康检查 |
 | [Image 接口](api/image.md) | 头像、商品图片、项目图标、凭证图片和活动海报读取 |
 | [Leaderboard 接口](api/leaderboard.md) | 当前赛季排行榜查询 |
@@ -54,7 +54,7 @@
 | [Shop 接口](api/shop.md) | 商品、积分与兑换 |
 | [Suggestion 接口](api/suggestion.md) | 用户建议提交 |
 | [补传接口](api/supplement.md) | 结算中赛季可补传凭证查询与补交 |
-| [User 接口](api/user.md) | 用户资料读取和更新 |
+| [User 接口](api/user.md) | 用户子路由存活校验与资料写入边界 |
 
 ---
 
@@ -72,7 +72,7 @@
 | [商城业务说明](business/shop.md) | 积分查询、商品展示和兑换规则 |
 | [结算赛季凭证补传](business/supplement.md) | 当前用户补传资格查询、凭证补交和资格消费规则 |
 | [用户建议业务说明](business/suggestion.md) | 建议提交规则和事务边界 |
-| [用户资料业务说明](business/user_profile.md) | 用户资料完整度和身高维护 |
+| [用户资料业务说明](business/user_profile.md) | 用户资料来源与写入边界 |
 
 ---
 

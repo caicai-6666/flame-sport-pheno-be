@@ -24,12 +24,12 @@ class ProjectProgressService:
         record_type: str,
         progress_delta: Decimal,
     ) -> Decimal:
-        """按项目特殊规则规范化初审原始增量。"""
+        """按凭证阶段规则规范化初审原始增量。"""
         if record_type == MONTH_START_RECORD_TYPE:
-            # 月初记录只建立 BMI 基线，不产生项目进度。
+            # 月初记录只建立通用阶段基线，不产生项目进度。
             return MIN_PROGRESS
         if record_type == MONTH_END_RECORD_TYPE:
-            # 月末达标即完成减重项目，不依赖模型返回的小数值。
+            # 月末达标即完成阶段型项目，不依赖模型返回的小数值。
             return MAX_PROGRESS
         return min(
             MAX_PROGRESS,

@@ -451,6 +451,8 @@ season_user.level_id IS NOT NULL
 
 初审失败时同样返回 `200 OK`，其中 `review_status` 为 `preliminary_rejected`，并按统一规则创建待发送通知。只有接口本身无法完成初审时才返回错误。
 
+响应中的 `review_comment` 保持原有字段名，但其值来自 `preliminary_review_comment`。该接口不写终审专用的 `review_comment` 数据库字段。
+
 并发处理规则：
 
 1. 调用模型前释放只读数据库事务，避免外部请求期间长期占用连接。

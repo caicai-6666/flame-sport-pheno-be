@@ -294,7 +294,11 @@ class ProofService:
             "seasonName": season.name,
             "projectName": project.name,
             "reviewStatus": proof_record.review_status,
-            "reviewComment": proof_record.review_comment or "",
+            "reviewComment": self._get_display_review_comment(proof_record),
+            "preliminaryReviewComment": (
+                proof_record.preliminary_review_comment or ""
+            ),
+            "finalReviewComment": proof_record.review_comment or "",
             "imageName": self._build_display_proof_image_name(
                 proof_record.image_url,
             ),
@@ -308,6 +312,21 @@ class ProofService:
             # 当前与补传页面需要回显用户原备注，历史列表保持原有响应契约。
             item["note"] = proof_record.note or ""
         return item
+
+    @staticmethod
+    def _get_display_review_comment(proof_record: ProofRecord) -> str:
+        """保持响应字段兼容，同时按审核阶段返回职责单一的意见列。"""
+        if proof_record.review_status in {
+            ProofReviewStatus.PRELIMINARY_APPROVED.value,
+            ProofReviewStatus.PRELIMINARY_REJECTED.value,
+        }:
+            return proof_record.preliminary_review_comment or ""
+        if proof_record.review_status in {
+            ProofReviewStatus.APPROVED.value,
+            ProofReviewStatus.REJECTED.value,
+        }:
+            return proof_record.review_comment or ""
+        return ""
 
     async def _create_or_update_proof_record_for_date(
         self,
@@ -379,6 +398,7 @@ class ProofService:
         proof_record.note = note
         proof_record.review_status = ProofReviewStatus.PENDING.value
         proof_record.review_comment = None
+        proof_record.preliminary_review_comment = None
         proof_record.progress_delta = Decimal("0.0000")
         proof_record.increase = Decimal("0.0000")
         proof_record.proof_date = proof_date

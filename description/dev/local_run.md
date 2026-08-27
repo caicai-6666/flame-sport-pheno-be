@@ -124,7 +124,7 @@ LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS=300
 PROGRESS_COMPLETION_SNAP_THRESHOLD=0.0001
 ```
 
-`LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS` 必须大于 `0`，默认每 15 分钟扫描一次；`LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS` 默认 `300`，仅审核上传满 5 分钟的待审凭证，为用户重传留出窗口。启用前应确认 `DEEPSEEK_API_KEY` 有效；生产任务会以 DeepSeek V4 非思考模式请求 JSON Output，并为偶发的空内容或截断 JSON 自动重试最多 3 次。任务会向 DeepSeek 发送用户填写的 `note`，减重挑战月初记录还会发送身高，月末记录会发送月初审核摘要。不会发送凭证图片、用户 ID、赛季 ID、挑战等级 ID 或其他等级规则。
+`LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS` 必须大于 `0`，默认每 15 分钟扫描一次；`LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS` 默认 `300`，仅审核上传满 5 分钟的待审凭证，为用户重传留出窗口。启用前应确认 `DEEPSEEK_API_KEY` 有效；生产任务会以 DeepSeek V4 非思考模式请求 JSON Output，并为偶发的空内容或截断 JSON 自动重试最多 3 次。任务会向 DeepSeek 发送用户填写的 `note`，月末记录还会发送同项目的月初审核摘要。月初记录所需的身高、体重或其他基线数据必须由用户写入备注；任务不会从用户资料补充这些数据，也不会发送凭证图片、用户 ID、赛季 ID、挑战等级 ID 或其他等级规则。
 
 `PROGRESS_COMPLETION_SNAP_THRESHOLD` 控制进度累计后与 `1` 的最大自动补足差额，默认 `0.0001`，可设为 `0` 关闭。该值不得大于数据库四位小数精度的最小单位 `0.0001`，避免提前判定项目完成。
 
@@ -137,9 +137,9 @@ python -m unittest discover -s tests -p 'test_llm_sport_evaluation.py' -v
 
 普通 `unittest discover` 默认跳过该测试，不会发起模型请求或消耗 token。生产提示词位于 `app/core/deepseek_preliminary_review.py`，样例位于测试文件顶部；设置本次命令的 `LLM_EVALUATION_STRICT=true` 时，模型的审核状态与样例 `expectedStatus` 不一致会使测试失败。
 
-脚本使用 DeepSeek 的 JSON Output：标准 `https://api.deepseek.com` 地址配合 `response_format={"type": "json_object"}`。提示词中明确要求模型内部先逐项判断、先生成不超过 40 个汉字的 `reviewComment`，再输出最终 `reviewStatus` 和 `progressDelta`；不会将详细推理过程返回给前端。
+脚本使用 DeepSeek 的 JSON Output：标准 `https://api.deepseek.com` 地址配合 `response_format={"type": "json_object"}`。提示词中明确要求模型内部先逐项判断、先生成不超过 100 个汉字的 `reviewComment`，再输出最终 `reviewStatus` 和 `progressDelta`；月初意见需要在该范围内完整保留月末审核所需的基线。规则使用派生指标时，提示词要求当前备注提供该指标或完整原始数据，并通过缺失数据反例禁止复用其他示例中的数值。模型不会将详细推理过程返回给前端。
 
-评测与生产服务使用同一套输入结构：项目名称、凭证类型、当前用户已选等级唯一对应的规则文本、规则备注和用户 `note`；减重挑战还会发送身高或月初审核摘要。不会发送凭证图片、用户 ID、赛季 ID、等级 ID、当前完成进度或其他等级规则。仓库中的减重样例均为虚构数据；手动调试时请勿将真实个人身高、体重等健康信息发送到第三方模型。控制台会打印每个样例的原始结构化输出，以及 DeepSeek 返回的 `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`，供人工比较提示词效果和缓存命中情况。
+评测与生产服务使用同一套输入结构：项目名称、凭证类型、当前用户已选等级唯一对应的规则文本、规则备注和用户 `note`；月末记录还会发送月初审核摘要。不会发送用户资料、凭证图片、用户 ID、赛季 ID、等级 ID、当前完成进度或其他等级规则。仓库中的阶段型挑战样例均为虚构数据；手动调试时请勿将真实个人健康信息发送到第三方模型。控制台会打印每个样例的原始结构化输出，以及 DeepSeek 返回的 `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`，供人工比较提示词效果和缓存命中情况。
 
 ---
 
@@ -186,7 +186,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS=24
 ```
 
-客户后端固定按 `Asia/Shanghai` 的 `season.start_date 00:00` 计算保护期，不依赖本地机器或容器时区。配置为 `0` 时不冻结客户业务写入；身高更新和建议提交始终允许。
+客户后端固定按 `Asia/Shanghai` 的 `season.start_date 00:00` 计算保护期，不依赖本地机器或容器时区。配置为 `0` 时不冻结客户业务写入；建议提交始终允许。
 
 本地资源目录包括：
 

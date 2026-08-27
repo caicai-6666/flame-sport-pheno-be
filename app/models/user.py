@@ -1,6 +1,4 @@
-from decimal import Decimal
-
-from sqlalchemy import Column, ForeignKey, Index, Numeric, String, text
+from sqlalchemy import Column, ForeignKey, Index, String, text
 from sqlalchemy.dialects.mysql import TINYINT
 from sqlmodel import Field, SQLModel
 
@@ -41,14 +39,6 @@ class User(SQLModel, table=True):
     avatar_url: str | None = Field(
         default=None,
         sa_column=Column(String(255), nullable=True, comment="头像地址"),
-    )
-    height_cm: Decimal | None = Field(
-        default=None,
-        sa_column=Column(
-            Numeric(5, 2),
-            nullable=True,
-            comment="用户身高，单位厘米，用于BMI计算",
-        ),
     )
     status: int = Field(
         default=1,

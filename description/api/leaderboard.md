@@ -47,7 +47,7 @@ Authorization: auth_code
 | `name` | `string` | 用户名称 |
 | `department_name` | `string` | 用户所属部门名称 |
 | `project_rule_level_id` | `number` | 用户当前赛季选择的挑战等级 ID |
-| `checkin_count` | `number` | 当前赛季累计初审通过的有效打卡次数；减重月初不计数，月末同项目最多计一次 |
+| `checkin_count` | `number` | 当前赛季累计初审通过的有效打卡次数；阶段型项目的月初记录不计数，月末记录同项目最多计一次 |
 | `is_current_user` | `boolean` | 是否为当前登录用户所在记录 |
 
 数据来源：
@@ -63,4 +63,4 @@ season_user.season_id = 当前激活赛季 ID
 
 该接口直接读取 `leaderboard_snapshot` 快照表，不实时统计 `proof_record`，也不在后端排序。前端可以基于 `checkin_count` 自行决定展示顺序。
 
-`leaderboard_snapshot` 由后端定时任务刷新，刷新间隔由 `LEADERBOARD_REFRESH_INTERVAL_SECONDS` 控制。默认启动时刷新一次，之后每 900 秒刷新一次；定时文本初审任务写入结果后也会立即刷新。每次刷新会统计当前赛季用户在本次刷新时刻前仍处于 `preliminary_approved` 或 `approved` 的有效凭证；凭证已通过 `season_user_id` 归属到当前赛季，因此赛季开始前抢先体验的通过凭证同样计入。待初审、初审失败和终审失败凭证不计入；管理员终审失败后应触发快照刷新。减重挑战的月初记录不计入，月末记录按同一用户同一项目最多一次统计。
+`leaderboard_snapshot` 由后端定时任务刷新，刷新间隔由 `LEADERBOARD_REFRESH_INTERVAL_SECONDS` 控制。默认启动时刷新一次，之后每 900 秒刷新一次；定时文本初审任务写入结果后也会立即刷新。每次刷新会统计当前赛季用户在本次刷新时刻前仍处于 `preliminary_approved` 或 `approved` 的有效凭证；凭证已通过 `season_user_id` 归属到当前赛季，因此赛季开始前抢先体验的通过凭证同样计入。待初审、初审失败和终审失败凭证不计入；管理员终审失败后应触发快照刷新。所有使用月初、月末凭证类型的阶段型项目都共用相同口径：月初记录不计入，月末记录按同一用户同一项目最多一次统计。

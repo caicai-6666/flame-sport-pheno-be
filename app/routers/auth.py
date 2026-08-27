@@ -2,7 +2,6 @@ from fastapi import APIRouter, Body, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
-from app.core.security import get_current_user_id
 from app.services.auth_service import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -26,15 +25,3 @@ async def login(
     )
 
     return {"auth_code": auth_code}
-
-
-@router.get("/profile_complete_check")
-async def check_user_profile_completion(
-    user_id: str = Depends(get_current_user_id),
-    session: AsyncSession = Depends(get_session),
-):
-    """检查当前用户资料是否完整。"""
-    return await auth_service.check_user_profile_completion(
-        user_id=user_id,
-        session=session,
-    )

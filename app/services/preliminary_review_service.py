@@ -18,14 +18,12 @@ from app.core.deepseek_preliminary_review import (
 from app.models.project_rule import ProjectRule
 from app.models.project_upload_config import (
     MONTH_END_RECORD_TYPE,
-    MONTH_START_RECORD_TYPE,
     ProjectUploadConfig,
 )
 from app.models.proof_record import ProofRecord, ProofReviewStatus
 from app.models.season import SeasonStatus
 from app.models.season_user import SeasonUser
 from app.models.season_user_project import SeasonUserProject
-from app.models.user import User
 from app.models.project import Project
 from app.repositories.notification_repository import notification_repository
 from app.repositories.proof_record_repository import proof_record_repository
@@ -51,7 +49,6 @@ class PreliminaryReviewSummary:
 PendingReviewRow = tuple[
     ProofRecord,
     SeasonUser,
-    User,
     Project,
     ProjectRule,
     ProjectUploadConfig,
@@ -151,7 +148,7 @@ class PreliminaryReviewService:
         response = {
             "proof_record_id": proof_record_id,
             "review_status": proof_record.review_status,
-            "review_comment": proof_record.review_comment or "",
+            "review_comment": proof_record.preliminary_review_comment or "",
             "progress_delta": float(proof_record.progress_delta),
             "increase": float(proof_record.increase),
         }
@@ -221,23 +218,20 @@ class PreliminaryReviewService:
         session: AsyncSession,
         pending_row: PendingReviewRow,
     ) -> PreliminaryReviewResult:
-        proof_record, season_user, user, project, rule, upload_config = pending_row
+        proof_record, season_user, project, rule, upload_config = pending_row
         rule_content = self._parse_rule_content(rule=rule)
-
-        if upload_config.record_type == MONTH_START_RECORD_TYPE and user.height_cm is None:
-            return self._build_rejected_result("未填写身高，无法计算BMI。")
 
         initial_review_comment: str | None = None
         if upload_config.record_type == MONTH_END_RECORD_TYPE:
             initial_review_comment = (
-                await proof_record_repository.find_month_start_review_comment(
+                await proof_record_repository.find_month_start_preliminary_review_comment(
                     session=session,
                     season_user_id=season_user.id or 0,
                     project_id=proof_record.project_id,
                 )
             )
             if not initial_review_comment:
-                return self._build_rejected_result("缺少月初记录，无法结算减重结果。")
+                return self._build_rejected_result("缺少有效月初记录，无法审核月末结果。")
 
         request = PreliminaryReviewRequest(
             project_name=project.name,
@@ -245,12 +239,6 @@ class PreliminaryReviewService:
             rule_content=rule_content,
             rule_note=rule.rule_note or "",
             note=proof_record.note or "",
-            # 月末评论已包含 BMI 和目标减重值，无须再次发送身高。
-            height_cm=(
-                user.height_cm
-                if upload_config.record_type == MONTH_START_RECORD_TYPE
-                else None
-            ),
             initial_review_comment=initial_review_comment,
         )
         # 月末基线查询结束后再访问模型，避免外部等待时占用数据库事务；提交只读事务
@@ -264,7 +252,7 @@ class PreliminaryReviewService:
         pending_row: PendingReviewRow,
         review_result: PreliminaryReviewResult,
     ) -> bool:
-        proof_record, season_user, _, project, _, upload_config = pending_row
+        proof_record, season_user, project, _, upload_config = pending_row
         if proof_record.id is None or season_user.id is None:
             raise RuntimeError("待初审凭证缺少主键关联")
 

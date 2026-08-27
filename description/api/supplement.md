@@ -53,6 +53,8 @@ proof_record.season_user_id = season_user.id
     "projectName": "跑步",
     "reviewStatus": "rejected",
     "reviewComment": "凭证信息未达到终审要求。",
+    "preliminaryReviewComment": "本次距离和配速均达标。",
+    "finalReviewComment": "凭证信息未达到终审要求。",
     "note": "完成跑步5公里",
     "imageName": "跑步.webp",
     "imageUrl": "/flame/api/image/proof_record/295",
@@ -72,7 +74,9 @@ proof_record.season_user_id = season_user.id
 | `seasonName` | `string` | 赛季名称 |
 | `projectName` | `string` | 运动项目名称 |
 | `reviewStatus` | `string` | 原凭证当前审核状态 |
-| `reviewComment` | `string` | 原凭证当前审核意见；为空时返回空字符串 |
+| `reviewComment` | `string` | 原凭证当前审核阶段的意见；初审状态读取 `preliminary_review_comment`，终审状态读取 `review_comment`，待审核或为空时返回空字符串 |
+| `preliminaryReviewComment` | `string` | 原凭证的大模型初审意见；未保存时返回空字符串 |
+| `finalReviewComment` | `string` | 原凭证的管理员终审意见；未终审或未填写时返回空字符串 |
 | `note` | `string` | 用户原凭证备注；为空时返回空字符串 |
 | `imageName` | `string` | 去除系统前缀后的凭证文件名 |
 | `imageUrl` | `string` | 当前用户可读取的凭证图片地址 |

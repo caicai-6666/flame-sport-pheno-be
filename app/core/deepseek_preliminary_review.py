@@ -23,7 +23,7 @@ SYSTEM_PROMPT = """
 
 仅输出 JSON 对象，不要 Markdown 或详细推理。字段顺序固定为：
 {
-  "reviewComment": "不超过40个汉字的中文审核意见",
+  "reviewComment": "不超过100个汉字的中文审核意见",
   "reviewStatus": "preliminary_approved 或 preliminary_rejected",
   "progressDelta": 0 到 1 之间的数字
 }
@@ -44,13 +44,18 @@ SYSTEM_PROMPT = """
    清楚表明用户实际参加了允许的运动类型，即视为一次有效参与；不得要求用户额外写
    “1次”、运动时长或人数。若规则明确有单次量化门槛，仍必须要求该门槛对应的指标。
 5. reviewComment 只说明本次运动的关键达标或不达标原因，不能复述全部规则、输出分析
-   过程或评价累计完成程度。
-6. recordType 为“月初记录”时，使用 heightCm 与 note 中月初体重计算 BMI，并从
-   ruleContent 的 BMI 区间确定目标减重值；通过时 progressDelta 必须为 0，评论必须包含
-   月初体重、BMI（1 位小数）、BMI 分级和目标减重值。
-7. recordType 为“月末记录”时，必须以 initialReviewComment 中的月初体重和目标减重值
-   为准，结合 note 中月末体重计算实际减重；达标时 progressDelta 必须为 1，否则为 0。
-   缺少所需信息时必须拒绝。
+   过程或评价累计完成程度。月初记录除外：其通过意见必须完整保留月末判断所需的基线。
+6. recordType 为“月初记录”时，这是通用的阶段基线记录。只依据 ruleContent、ruleNote
+   和 note 判断规则需要哪些初始指标、派生指标和目标；不得使用未传入的用户资料，也不得
+   默认规则一定与体重或 BMI 有关。note 缺少规则要求的必要数据时必须拒绝。通过时
+   progressDelta 必须为 0，reviewComment 必须简洁但完整地保留月末判断所需的初始值、
+   必要派生值和匹配目标。若规则按派生指标分档，note 必须明确给出该指标，或给出计算它
+   所需的全部原始数据；例如 BMI 分档必须有 BMI，或同时有身高和体重。绝不能从 few-shot
+   示例、常识或其他请求中补齐当前 note 缺少的数值。
+7. recordType 为“月末记录”时，这是通用的阶段结果记录。必须依据 ruleContent、ruleNote、
+   initialReviewComment 中的月初基线和当前 note 判断是否达标，不得补充未提供的数据。
+   缺少月初基线或规则要求的当前指标时必须拒绝；达标时 progressDelta 必须为 1，未达标
+   时必须为 0。
 
 以下 few-shot 仅说明规则语义和输出方式。实际判定只能使用当前请求传入的 ruleContent，
 不能把示例中的数值或项目规则套用到其他请求：
@@ -85,9 +90,18 @@ note="周末登山5.6km，累计爬升380m。"
 输出={"reviewComment":"本次距离和海拔均达标。","reviewStatus":"preliminary_approved","progressDelta":0.5}
 说明：“2次≥5km”表示累计需要 2 次、每次至少 5km；本条满足单次距离和海拔，贡献 1/2。
 
-示例 6（减重月初建档）：
-recordType="月初记录"；ruleContent=[{"label":"BMI < 24","value":"1.5kg"},{"label":"24–28","value":"2kg"},{"label":"≥28","value":"2.5kg"}]；heightCm=170；note="月初空腹体重80kg。"
+示例 6（规则要求派生指标的月初基线）：
+recordType="月初记录"；ruleContent=[{"label":"BMI < 24","value":"1.5kg"},{"label":"24–28","value":"2kg"},{"label":"≥28","value":"2.5kg"}]；note="身高170cm，月初空腹体重80kg。"
 输出={"reviewComment":"月初80kg，BMI27.7（超重），目标减重2kg。","reviewStatus":"preliminary_approved","progressDelta":0}
+
+示例 7（缺少派生指标原始数据的月初记录）：
+recordType="月初记录"；ruleContent=[{"label":"BMI < 24","value":"1.5kg"},{"label":"24–28","value":"2kg"},{"label":"≥28","value":"2.5kg"}]；note="月初空腹体重80kg。"
+输出={"reviewComment":"缺少身高，无法计算BMI及匹配目标。","reviewStatus":"preliminary_rejected","progressDelta":0}
+说明：当前 note 没有身高，禁止使用示例 6 的170cm或据此生成的BMI。
+
+示例 8（使用月初基线的月末结果）：
+recordType="月末记录"；ruleContent=[{"label":"BMI < 24","value":"1.5kg"},{"label":"24–28","value":"2kg"},{"label":"≥28","value":"2.5kg"}]；initialReviewComment="月初80kg，BMI27.7（超重），目标减重2kg。"；note="月末空腹体重77.8kg。"
+输出={"reviewComment":"较月初减重2.2kg，达到2kg目标。","reviewStatus":"preliminary_approved","progressDelta":1}
 """.strip()
 
 
@@ -102,7 +116,6 @@ class PreliminaryReviewRequest:
     rule_content: list[dict[str, str]]
     rule_note: str
     note: str
-    height_cm: Decimal | None = None
     initial_review_comment: str | None = None
 
 
@@ -186,8 +199,6 @@ class DeepSeekPreliminaryReviewClient:
             "ruleNote": request.rule_note,
         }
         proof_input: dict[str, Any] = {"note": request.note}
-        if request.height_cm is not None:
-            proof_input["heightCm"] = float(request.height_cm)
         if request.initial_review_comment is not None:
             proof_input["initialReviewComment"] = request.initial_review_comment
 

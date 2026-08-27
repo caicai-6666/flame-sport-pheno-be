@@ -15,7 +15,6 @@ from app.models.project_upload_config import (
 from app.models.proof_record import ProofRecord, ProofReviewStatus
 from app.models.season import Season, SeasonStatus
 from app.models.season_user import SeasonUser
-from app.models.user import User
 
 
 class ProofRecordRepository:
@@ -26,7 +25,6 @@ class ProofRecordRepository:
     ) -> tuple[
         ProofRecord,
         SeasonUser,
-        User,
         Project,
         ProjectRule,
         ProjectUploadConfig,
@@ -36,13 +34,11 @@ class ProofRecordRepository:
             select(
                 ProofRecord,
                 SeasonUser,
-                User,
                 Project,
                 ProjectRule,
                 ProjectUploadConfig,
             )
             .join(SeasonUser, SeasonUser.id == ProofRecord.season_user_id)
-            .join(User, User.id == SeasonUser.user_id)
             .join(Project, Project.id == ProofRecord.project_id)
             .join(
                 ProjectRule,
@@ -72,7 +68,6 @@ class ProofRecordRepository:
         tuple[
             ProofRecord,
             SeasonUser,
-            User,
             Project,
             ProjectRule,
             ProjectUploadConfig,
@@ -83,13 +78,11 @@ class ProofRecordRepository:
             select(
                 ProofRecord,
                 SeasonUser,
-                User,
                 Project,
                 ProjectRule,
                 ProjectUploadConfig,
             )
             .join(SeasonUser, SeasonUser.id == ProofRecord.season_user_id)
-            .join(User, User.id == SeasonUser.user_id)
             .join(Project, Project.id == ProofRecord.project_id)
             .join(
                 ProjectRule,
@@ -118,15 +111,15 @@ class ProofRecordRepository:
         )
         return list(result.all())
 
-    async def find_month_start_review_comment(
+    async def find_month_start_preliminary_review_comment(
         self,
         session: AsyncSession,
         season_user_id: int,
         project_id: int,
     ) -> str | None:
-        """获取同一赛季项目最早通过的月初审核摘要，作为月末结算基线。"""
+        """获取未被终审覆盖的月初初审意见，作为同项目月末审核基线。"""
         result = await session.execute(
-            select(ProofRecord.review_comment)
+            select(ProofRecord.preliminary_review_comment)
             .join(
                 ProjectUploadConfig,
                 ProjectUploadConfig.id == ProofRecord.project_upload_config_id,
@@ -135,11 +128,15 @@ class ProofRecordRepository:
             .where(ProofRecord.project_id == project_id)
             .where(ProofRecord.status == 1)
             .where(
-                ProofRecord.review_status
-                == ProofReviewStatus.PRELIMINARY_APPROVED.value
+                ProofRecord.review_status.in_(
+                    (
+                        ProofReviewStatus.PRELIMINARY_APPROVED.value,
+                        ProofReviewStatus.APPROVED.value,
+                    )
+                )
             )
             .where(ProjectUploadConfig.record_type == MONTH_START_RECORD_TYPE)
-            .where(ProofRecord.review_comment.is_not(None))
+            .where(ProofRecord.preliminary_review_comment.is_not(None))
             .order_by(
                 ProofRecord.proof_date.asc(),
                 ProofRecord.created_at.asc(),
@@ -169,7 +166,7 @@ class ProofRecordRepository:
             .where(ProofRecord.note == expected_note)
             .values(
                 review_status=review_status.value,
-                review_comment=review_comment,
+                preliminary_review_comment=review_comment,
                 progress_delta=progress_delta,
                 increase=Decimal("0.0000"),
             )
@@ -323,6 +320,7 @@ class ProofRecordRepository:
             proof_date=proof_date,
             review_status=ProofReviewStatus.PENDING.value,
             review_comment=None,
+            preliminary_review_comment=None,
             status=1,
             created_at=created_at,
         )

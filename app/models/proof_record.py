@@ -139,7 +139,15 @@ class ProofRecord(SQLModel, table=True):
         sa_column=Column(
             String(500),
             nullable=True,
-            comment="初审或终审的审核说明，终审时可覆盖初审意见",
+            comment="管理员终审意见；初审不得写入",
+        ),
+    )
+    preliminary_review_comment: str | None = Field(
+        default=None,
+        sa_column=Column(
+            String(500),
+            nullable=True,
+            comment="大模型初审意见；终审不得覆盖；月末审核可作为同项目月初基线",
         ),
     )
     # 保留模型给出的原始增量，进度封顶后仍可供后续终审回补使用。

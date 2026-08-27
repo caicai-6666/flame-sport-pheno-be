@@ -44,9 +44,9 @@ proof_record.review_status = pending
 proof_record.created_at <= 本轮扫描时间 - LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS
 ```
 
-`season_user.level_id` 与 `proof_record.project_id` 共同定位唯一的启用 `project_rule`。等级 ID、赛季 ID、用户 ID、图片路径和项目其他等级规则都不会发送给模型。模型仅接收项目名称、凭证类型、该条规则、规则备注和用户 `note`；减重挑战的月初记录额外发送用户身高，月末记录额外发送同赛季最早通过月初记录的审核意见。
+`season_user.level_id` 与 `proof_record.project_id` 共同定位唯一的启用 `project_rule`。等级 ID、赛季 ID、用户 ID、用户资料、图片路径和项目其他等级规则都不会发送给模型。模型仅接收项目名称、凭证类型、该条规则、规则备注和用户 `note`；月末记录额外接收同赛季同项目最早有效月初记录的 `preliminary_review_comment`。月初备注必须自行包含规则判断所需的初始数据，例如 BMI 分档规则所需的身高和体重；后端不读取或补充平台保存的身高。月初记录初审通过后即使被终审通过，独立初审意见仍会保留，不受 `review_comment` 终审覆盖影响。
 
-模型返回 `reviewComment`、`reviewStatus` 和 `progressDelta`。初审通过时，规范化后的 `progressDelta` 保存到 `proof_record.progress_delta`，经过进度条上限分配后实际生效的部分保存到 `proof_record.increase`。普通项目在同一事务内累加 `season_user_project.completion_progress` 并封顶到 `1`；若正向增量累计后距离 `1` 只差一个最小精度单位 `0.0001`，系统会将该条规范化增量补足，避免如三次 `0.3333` 累计为 `0.9999`。减重挑战月初通过时进度保持 `0`，月末通过时直接设为 `1`。
+模型返回 `reviewComment`、`reviewStatus` 和 `progressDelta`。初审意见只写入 `proof_record.preliminary_review_comment`；`review_comment` 为管理员终审专用字段，初审不得写入。客户端记录查询同时返回 `preliminaryReviewComment` 和 `finalReviewComment`，分别展示两个阶段意见；既有 `reviewComment` 保持兼容，按当前审核阶段选择其中一个字段。规范化后的 `progressDelta` 保存到 `proof_record.progress_delta`，经过进度条上限分配后实际生效的部分保存到 `proof_record.increase`。普通项目在同一事务内累加 `season_user_project.completion_progress` 并封顶到 `1`；若正向增量累计后距离 `1` 只差一个最小精度单位 `0.0001`，系统会将该条规范化增量补足，避免如三次 `0.3333` 累计为 `0.9999`。所有使用月初、月末凭证类型的阶段型项目共用同一规则：月初通过时只建立基线，进度保持 `0`；月末通过时直接设为 `1`。
 
 初审失败时，客户端后端在同一事务中创建标题为“运动凭证初审结果”的 `pending` 通知。通知依次保存审核结果、运动项目、凭证日期和审核意见；初审通过不创建通知。通知写入失败时初审结论一并回滚，凭证保持 `pending` 等待后续任务重试。
 
@@ -62,7 +62,7 @@ proof_record.created_at <= 本轮扫描时间 - LLM_PRELIMINARY_REVIEW_MIN_AGE_S
 
 一条凭证默认代表一次有效参与或一个自然日的有效记录。若规则只有允许的运动类型和累计参与/次数目标，例如公司羽毛球或篮球活动，用户在 `note` 中清楚说明实际参加该活动即可通过，不要求额外填写“1次”、时长或参与人数；只有规则明确配置单次时长、距离、配速、海拔等门槛时，才要求对应指标。
 
-初审系统提示词内置步数、跑步、健身、公司运动、登山和减重挑战的固定 few-shot，用于解释“累计目标 + 单次门槛”的通用语义。它们不替代运行时从 `project_rule` 查询到的规则；每次请求仍只传入当前用户、当前项目和已选等级对应的唯一 `ruleContent`。
+初审系统提示词内置普通累计挑战和月初、月末阶段型挑战的 few-shot，用于解释“累计目标 + 单次门槛”和“建立基线 + 期末比较”的通用语义。它们不替代运行时从 `project_rule` 查询到的规则；每次请求仍只传入当前项目和已选等级对应的唯一 `ruleContent`。月初意见需要保留规则要求的初始值、必要派生值和匹配目标，具体指标不由后端硬编码。规则按派生指标分档时，用户备注必须提供该指标或计算它所需的全部原始数据；提示词同时提供缺少原始数据的拒绝反例，禁止模型复用其他示例中的数值。
 
 任务按 `LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS` 固定间隔执行，默认每 15 分钟筛查一次；仅审核已上传至少 `LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS`（默认 5 分钟）的待审凭证，为用户重传留出窗口。本批次有结果写入后立即刷新排行榜快照。
 
@@ -82,7 +82,7 @@ proof_record.created_at <= 本轮扫描时间 - LLM_PRELIMINARY_REVIEW_MIN_AGE_S
 
 `leaderboard_snapshot` 用于保存排行榜快照。
 
-当前设计口径是统计当前赛季仍具有初审或终审通过状态的有效凭证次数。待初审、初审失败和终审失败凭证不会进入排行榜；管理员终审失败后应刷新排行榜快照。减重挑战的月初记录只建立 BMI 基线，永不计数；同一用户同一项目的任意数量月末通过记录最多计为一次，避免重传或重复记录重复进入排行榜。
+当前设计口径是统计当前赛季仍具有初审或终审通过状态的有效凭证次数。待初审、初审失败和终审失败凭证不会进入排行榜；管理员终审失败后应刷新排行榜快照。阶段型项目的月初记录只建立审核基线，永不计数；同一用户同一项目的任意数量月末通过记录最多计为一次，避免重传或重复记录重复进入排行榜。
 
 快照表只保存 `season_user_id` 和 `checkin_count` 等必要数据，不保存 `rank_no` 和 `calculated_at`：
 
@@ -137,7 +137,7 @@ proof_record.created_at < 本次刷新时刻
 
 凭证通过 `season_user_id` 已经归属到唯一赛季，因此排行榜不再以 `season.start_date` 作为上传时间下限；赛季开始前的抢先体验凭证初审通过后同样计入当前赛季排行榜。
 
-减重挑战还适用：
+所有使用月初、月末凭证类型的阶段型项目还适用：
 
 ```text
 record_type = 月初记录：不计数
