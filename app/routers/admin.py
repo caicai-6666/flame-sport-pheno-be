@@ -5,7 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_session
 from app.core.media_type import resolve_image_media_type
 from app.services.image_service import image_service
-from app.services.preliminary_review_service import preliminary_review_service
+from app.services.preliminary_review_service import (
+    immediate_preliminary_review_service,
+    supplement_preliminary_review_service,
+)
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -147,7 +150,19 @@ async def review_admin_proof_record_immediately(
     session: AsyncSession = Depends(get_session),
 ):
     """按凭证 ID 立即执行与定时任务相同的文本初审。"""
-    return await preliminary_review_service.review_pending_by_id(
+    return await immediate_preliminary_review_service.review_pending_by_id(
+        session=session,
+        proof_record_id=proof_record_id,
+    )
+
+
+@router.post("/supplement/{proof_record_id}/preliminary-review")
+async def review_admin_supplement_immediately(
+    proof_record_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """使用资格固化上下文立即初审一条结算期补交凭证。"""
+    return await supplement_preliminary_review_service.review_pending_by_id(
         session=session,
         proof_record_id=proof_record_id,
     )

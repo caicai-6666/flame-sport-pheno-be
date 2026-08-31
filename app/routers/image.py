@@ -12,6 +12,11 @@ router = APIRouter(prefix="/image", tags=["image"])
 IMAGE_CACHE_CONTROL = (
     f"private, max-age={settings.IMAGE_CACHE_MAX_AGE_SECONDS}"
 )
+PROOF_RECORD_NO_CACHE_HEADERS = {
+    "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
 
 
 @router.get("")
@@ -113,5 +118,6 @@ async def get_proof_record_image(
         path=image_path,
         media_type=resolve_image_media_type(image_path),
         filename=image_path.name,
-        headers={"Cache-Control": IMAGE_CACHE_CONTROL},
+        # 同一凭证 ID 重传后仍使用固定 URL，禁止浏览器复用旧图片。
+        headers=PROOF_RECORD_NO_CACHE_HEADERS,
     )

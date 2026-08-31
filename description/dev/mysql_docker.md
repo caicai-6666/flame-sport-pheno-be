@@ -58,6 +58,19 @@ Compose 部署时，后端会使用 Docker 网络中的 `mysql:3306`；宿主机
 
 `SQLModel.metadata.create_all()` 不会为已有表补充字段。对已存在数据库，需要按已部署版本执行相应迁移。
 
+### 补交初审上下文快照
+
+部署补交专用初审前，先备份数据库并执行顶层部署目录中的
+[`004_supplement_preliminary_review_context.sql`](../../../../mysql/init/004_supplement_preliminary_review_context.sql)：
+
+```bash
+docker compose exec -T mysql sh -c \
+  'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' \
+  < mysql/init/004_supplement_preliminary_review_context.sql
+```
+
+脚本为 `season_supplement_eligibility` 增加 `preliminary_review_context_snapshot`，使用当前有效规则回填历史资格，并把状态约束扩展为 `0～3`。已有卷不会自动执行 `mysql/init/` 中新增的脚本，因此必须在客户端和管理端新代码启动前手动迁移；生产执行时应先暂停补传、初审和结算任务，迁移后确认所有非零资格都存在有效快照。
+
 ### 赛季结算中状态
 
 启用 `status = 2` 结算中状态前，执行仓库中的

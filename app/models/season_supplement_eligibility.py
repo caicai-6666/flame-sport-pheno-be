@@ -1,4 +1,8 @@
+from enum import IntEnum
+from typing import Any
+
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     Column,
     ForeignKey,
@@ -8,6 +12,13 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.mysql import BIGINT, TINYINT
 from sqlmodel import Field, SQLModel
+
+
+class SupplementEligibilityStatus(IntEnum):
+    CLOSED = 0
+    OPEN = 1
+    PENDING_PRELIMINARY_REVIEW = 2
+    PRELIMINARY_APPROVED = 3
 
 
 class SeasonSupplementEligibility(SQLModel, table=True):
@@ -26,7 +37,7 @@ class SeasonSupplementEligibility(SQLModel, table=True):
             "id",
         ),
         CheckConstraint(
-            "status IN (0, 1)",
+            "status IN (0, 1, 2, 3)",
             name="chk_season_supplement_status",
         ),
         {
@@ -67,12 +78,20 @@ class SeasonSupplementEligibility(SQLModel, table=True):
             comment="允许补传的凭证记录ID",
         )
     )
+    preliminary_review_context_snapshot: dict[str, Any] | None = Field(
+        default=None,
+        sa_column=Column(
+            JSON,
+            nullable=True,
+            comment="补交初审上下文快照，资格重开时不得覆盖",
+        ),
+    )
     status: int = Field(
-        default=1,
+        default=SupplementEligibilityStatus.OPEN,
         sa_column=Column(
             TINYINT(unsigned=True),
             nullable=False,
             server_default=text("1"),
-            comment="资格状态：1可补传，0已关闭",
+            comment="资格状态：0关闭，1可补传，2待初审，3初审通过",
         ),
     )

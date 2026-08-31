@@ -42,6 +42,7 @@ http://backend:8000/flame/api/admin
 | `POST` | `/flame/api/admin/product/replace` | 用新奖品图片地址取代旧地址 |
 | `GET` | `/flame/api/admin/proof_record/{proof_record_id}` | 根据凭证记录读取运动凭证图片 |
 | `POST` | `/flame/api/admin/proof_record/{proof_record_id}/preliminary-review` | 按凭证记录立即执行文本初审 |
+| `POST` | `/flame/api/admin/supplement/{proof_record_id}/preliminary-review` | 使用补传资格快照立即初审补交凭证 |
 
 ---
 
@@ -435,7 +436,7 @@ season_user.level_id IS NOT NULL
 存在凭证关联的 project_upload_config
 ```
 
-该接口按 ID 处理单条凭证，允许激活、结算中或已结束赛季，不检查 `LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS`。因此管理端可以补审过往赛季遗留的 `pending` 凭证；初审已经完成的记录不会重复审核，未开始赛季仍保持不可审核。定时任务的自动扫描范围不变，仍只处理当前激活赛季。
+该接口按 ID 处理单条凭证，允许进行中、结算中或已结束赛季，不检查 `LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS`。因此管理端可以在赛季进入结算后补审截止前遗留的 `pending` 凭证，也可以处理已结束赛季的历史遗留记录；初审已经完成的记录不会重复审核，未开始赛季不可审核。资格状态为 `2` 的补交记录必须使用补交专用接口，不能从该入口退回实时规则。
 
 成功响应：
 
@@ -466,6 +467,7 @@ season_user.level_id IS NOT NULL
 | --- | --- | --- |
 | `404` | 凭证不存在或已失效 | `凭证不存在或已失效` |
 | `409` | 凭证所属赛季尚未开始 | `凭证所属赛季尚未开始，不允许初审` |
+| `409` | 记录属于已经补交的待审凭证 | `补交凭证必须使用补交初审服务` |
 | `409` | 凭证已不再处于待初审状态 | `凭证当前状态不是待初审` |
 | `409` | 缺少正式参与信息、启用规则或上传配置 | `凭证缺少可用的初审规则或参与信息` |
 | `409` | 模型调用期间凭证被重传或由其他任务完成初审 | `凭证内容或审核状态已变化，请刷新后重试` |
@@ -474,3 +476,26 @@ season_user.level_id IS NOT NULL
 > **警告**
 >
 > 该接口会修改审核状态、项目进度，并可能创建通知。调用方必须遵守本路由的 Docker 内网访问边界；在开放到其他网络前，应先补充真实的管理端鉴权。
+
+---
+
+## POST `/flame/api/admin/supplement/{proof_record_id}/preliminary-review`
+
+按凭证记录 ID 初审一条结算期补交记录。该接口仅接受资格状态为 `2`、凭证状态为 `pending` 且所属赛季为结算中的记录，并强制读取资格创建时固化的 `preliminary_review_context_snapshot`。
+
+请求示例：
+
+```http
+POST /flame/api/admin/supplement/115/preliminary-review
+```
+
+成功响应与通用立即初审接口一致。初审结果写回和资格状态变更位于同一事务：通过时执行 `2 → 3` 并等待终审，失败时执行 `2 → 1` 并允许用户再次补交；模型异常、并发重传或上下文校验失败时资格保持 `2`。
+
+错误响应：
+
+| 状态码 | 场景 | `detail` |
+| --- | --- | --- |
+| `409` | 不是结算中的待补交初审记录 | `凭证不是待补交初审状态` |
+| `409` | 快照等级与当前参赛等级不一致 | `补交初审上下文与参赛等级不一致` |
+| `409` | 模型调用期间凭证被其他任务处理 | `凭证内容或审核状态已变化，请刷新后重试` |
+| `502` | 快照缺失、结构非法或 DeepSeek 调用失败 | 对应的上下文或模型错误 |

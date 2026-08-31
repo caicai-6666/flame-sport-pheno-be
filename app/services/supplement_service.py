@@ -12,6 +12,7 @@ from app.core.storage import (
 )
 from app.models.proof_record import ProofRecord
 from app.models.season import Season
+from app.models.season_supplement_eligibility import SupplementEligibilityStatus
 from app.repositories.project_repository import project_repository
 from app.repositories.season_user_repository import season_user_repository
 from app.repositories.supplement_repository import supplement_repository
@@ -112,7 +113,7 @@ class SupplementService:
         old_image_path: Path | None = None
         saved_new_image = False
         try:
-            # 再次加锁读取资格；并发请求中只有首个成功提交者能够消费资格。
+            # 再次加锁读取资格；并发覆盖按锁顺序串行，避免图片和凭证字段交叉写入。
             locked_record = await supplement_repository.get_user_eligible_record(
                 session=session,
                 user_id=user_id,
@@ -166,8 +167,11 @@ class SupplementService:
                 season_id=season_id,
                 project_lock=locked_project,
             )
-            # 只有图片与凭证更新都成功时才在同一事务中消费补传资格。
-            eligibility.status = 0
+            # 终审通过前资格始终可重复补传；每次新版本都回到待补交初审，
+            # 旧的模型或终审结果会被凭证版本与状态校验丢弃。
+            eligibility.status = (
+                SupplementEligibilityStatus.PENDING_PRELIMINARY_REVIEW
+            )
             await session.flush()
             await session.commit()
         except HTTPException:

@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,12 +23,14 @@ from app.models.project_upload_config import (
 )
 from app.models.proof_record import ProofRecord, ProofReviewStatus
 from app.models.season import SeasonStatus
+from app.models.season_supplement_eligibility import SupplementEligibilityStatus
 from app.models.season_user import SeasonUser
 from app.models.season_user_project import SeasonUserProject
 from app.models.project import Project
 from app.repositories.notification_repository import notification_repository
 from app.repositories.proof_record_repository import proof_record_repository
 from app.repositories.season_user_repository import season_user_repository
+from app.repositories.supplement_repository import supplement_repository
 from app.services.leaderboard_service import leaderboard_service
 from app.services.project_progress_service import project_progress_service
 
@@ -44,6 +47,17 @@ class PreliminaryReviewSummary:
     found_count: int = 0
     updated_count: int = 0
     failed_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class PreliminaryReviewContextSnapshot:
+    """补传资格固化的模型审核输入，不读取新赛季实时配置。"""
+
+    project_name: str
+    level_id: int
+    record_type: str
+    rule_content: list[dict[str, str]]
+    rule_note: str
 
 
 PendingReviewRow = tuple[
@@ -217,12 +231,22 @@ class PreliminaryReviewService:
         self,
         session: AsyncSession,
         pending_row: PendingReviewRow,
+        context_snapshot: PreliminaryReviewContextSnapshot | None = None,
     ) -> PreliminaryReviewResult:
         proof_record, season_user, project, rule, upload_config = pending_row
-        rule_content = self._parse_rule_content(rule=rule)
+        if context_snapshot is None:
+            project_name = project.name
+            record_type = upload_config.record_type
+            rule_content = self._parse_rule_content(rule=rule)
+            rule_note = rule.rule_note or ""
+        else:
+            project_name = context_snapshot.project_name
+            record_type = context_snapshot.record_type
+            rule_content = context_snapshot.rule_content
+            rule_note = context_snapshot.rule_note
 
         initial_review_comment: str | None = None
-        if upload_config.record_type == MONTH_END_RECORD_TYPE:
+        if record_type == MONTH_END_RECORD_TYPE:
             initial_review_comment = (
                 await proof_record_repository.find_month_start_preliminary_review_comment(
                     session=session,
@@ -234,10 +258,10 @@ class PreliminaryReviewService:
                 return self._build_rejected_result("缺少有效月初记录，无法审核月末结果。")
 
         request = PreliminaryReviewRequest(
-            project_name=project.name,
-            record_type=upload_config.record_type,
+            project_name=project_name,
+            record_type=record_type,
             rule_content=rule_content,
-            rule_note=rule.rule_note or "",
+            rule_note=rule_note,
             note=proof_record.note or "",
             initial_review_comment=initial_review_comment,
         )
@@ -251,6 +275,9 @@ class PreliminaryReviewService:
         session: AsyncSession,
         pending_row: PendingReviewRow,
         review_result: PreliminaryReviewResult,
+        *,
+        record_type_override: str | None = None,
+        commit: bool = True,
     ) -> bool:
         proof_record, season_user, project, _, upload_config = pending_row
         if proof_record.id is None or season_user.id is None:
@@ -260,7 +287,7 @@ class PreliminaryReviewService:
         normalized_progress_delta = Decimal("0.0000")
         if review_result.review_status == ProofReviewStatus.PRELIMINARY_APPROVED:
             normalized_progress_delta = project_progress_service.normalize_progress_delta(
-                record_type=upload_config.record_type,
+                record_type=(record_type_override or upload_config.record_type),
                 progress_delta=review_result.progress_delta,
             )
             # 同一赛季项目的通过结果必须串行写入：这样多实例同时初审时，后一条
@@ -373,12 +400,21 @@ class PreliminaryReviewService:
                 ),
             )
 
-        await session.commit()
+        if commit:
+            await session.commit()
+        else:
+            await session.flush()
         return True
 
     def _parse_rule_content(self, rule: ProjectRule) -> list[dict[str, str]]:
         """兼容 MySQL JSON 和历史字符串值，确保模型收到唯一规则的标准结构。"""
-        raw_rule_content = rule.rule_content
+        return self._parse_rule_content_value(rule.rule_content)
+
+    def _parse_rule_content_value(
+        self,
+        raw_rule_content: Any,
+    ) -> list[dict[str, str]]:
+        """解析实时规则或资格快照中的指标数组。"""
         if isinstance(raw_rule_content, str):
             try:
                 raw_rule_content = json.loads(raw_rule_content)
@@ -398,6 +434,43 @@ class PreliminaryReviewService:
             parsed_rule_content.append({"label": label, "value": value})
         return parsed_rule_content
 
+    def parse_context_snapshot(
+        self,
+        raw_snapshot: dict[str, Any] | str | None,
+    ) -> PreliminaryReviewContextSnapshot:
+        """严格解析补交资格快照，缺失字段时拒绝退回实时规则。"""
+        if isinstance(raw_snapshot, str):
+            try:
+                raw_snapshot = json.loads(raw_snapshot)
+            except json.JSONDecodeError as exc:
+                raise DeepSeekPreliminaryReviewError("补交初审上下文快照非法") from exc
+        if not isinstance(raw_snapshot, dict):
+            raise DeepSeekPreliminaryReviewError("补交初审上下文快照缺失")
+
+        project_name = raw_snapshot.get("projectName")
+        level_id = raw_snapshot.get("levelId")
+        record_type = raw_snapshot.get("recordType")
+        rule_note = raw_snapshot.get("ruleNote")
+        if (
+            not isinstance(project_name, str)
+            or not project_name.strip()
+            or not isinstance(level_id, int)
+            or level_id <= 0
+            or not isinstance(record_type, str)
+            or not record_type.strip()
+            or not isinstance(rule_note, str)
+        ):
+            raise DeepSeekPreliminaryReviewError("补交初审上下文快照字段非法")
+        return PreliminaryReviewContextSnapshot(
+            project_name=project_name.strip(),
+            level_id=level_id,
+            record_type=record_type.strip(),
+            rule_content=self._parse_rule_content_value(
+                raw_snapshot.get("ruleContent")
+            ),
+            rule_note=rule_note,
+        )
+
     def _build_rejected_result(self, review_comment: str) -> PreliminaryReviewResult:
         return PreliminaryReviewResult(
             review_comment=review_comment,
@@ -407,3 +480,142 @@ class PreliminaryReviewService:
 
 
 preliminary_review_service = PreliminaryReviewService()
+
+
+class ScheduledPreliminaryReviewService:
+    """只承接进行中赛季定时批量初审。"""
+
+    async def review_pending_active_season(
+        self,
+        session: AsyncSession,
+        season_id: int,
+        cutoff_at: datetime,
+    ) -> PreliminaryReviewSummary:
+        return await preliminary_review_service.review_pending_current_season(
+            session=session,
+            season_id=season_id,
+            cutoff_at=cutoff_at,
+        )
+
+
+class ImmediatePreliminaryReviewService:
+    """处理非未开始赛季的非补交待审凭证。"""
+
+    async def review_pending_by_id(
+        self,
+        session: AsyncSession,
+        proof_record_id: int,
+    ) -> dict[str, float | int | str]:
+        supplement_row = (
+            await supplement_repository.get_pending_preliminary_review_record(
+                session=session,
+                proof_record_id=proof_record_id,
+            )
+        )
+        if supplement_row is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="补交凭证必须使用补交初审服务",
+            )
+        return await preliminary_review_service.review_pending_by_id(
+            session=session,
+            proof_record_id=proof_record_id,
+        )
+
+
+class SupplementPreliminaryReviewService:
+    """只使用资格快照审核结算期已经补交的待审凭证。"""
+
+    async def review_pending_by_id(
+        self,
+        session: AsyncSession,
+        proof_record_id: int,
+    ) -> dict[str, float | int | str]:
+        supplement_row = (
+            await supplement_repository.get_pending_preliminary_review_record(
+                session=session,
+                proof_record_id=proof_record_id,
+            )
+        )
+        if supplement_row is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="凭证不是待补交初审状态",
+            )
+        eligibility, proof_record, season_user, _, project, upload_config = (
+            supplement_row
+        )
+        context_snapshot = preliminary_review_service.parse_context_snapshot(
+            eligibility.preliminary_review_context_snapshot
+        )
+        if context_snapshot.level_id != season_user.level_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="补交初审上下文与参赛等级不一致",
+            )
+        pending_row: PendingReviewRow = (
+            proof_record,
+            season_user,
+            project,
+            # 补交审核不会读取该实时规则；占位对象仅保持公共写回结构稳定。
+            ProjectRule(
+                project_id=proof_record.project_id,
+                level_id=context_snapshot.level_id,
+                rule_content=context_snapshot.rule_content,
+                rule_note=context_snapshot.rule_note,
+            ),
+            upload_config,
+        )
+        await session.commit()
+        try:
+            review_result = await preliminary_review_service._evaluate_row(
+                session=session,
+                pending_row=pending_row,
+                context_snapshot=context_snapshot,
+            )
+            applied = await preliminary_review_service._persist_result(
+                session=session,
+                pending_row=pending_row,
+                review_result=review_result,
+                record_type_override=context_snapshot.record_type,
+                commit=False,
+            )
+            if not applied:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="凭证内容或审核状态已变化，请刷新后重试",
+                )
+            # 初审失败不进入管理端终审队列，重新开放同一资格供用户修正；
+            # 只有初审通过的补交记录才进入待终审状态。
+            eligibility.status = (
+                SupplementEligibilityStatus.PRELIMINARY_APPROVED
+                if (
+                    review_result.review_status
+                    == ProofReviewStatus.PRELIMINARY_APPROVED
+                )
+                else SupplementEligibilityStatus.OPEN
+            )
+            await session.commit()
+        except DeepSeekPreliminaryReviewError as exc:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=str(exc),
+            ) from exc
+        except Exception:
+            await session.rollback()
+            raise
+
+        await session.refresh(proof_record)
+        return {
+            "proof_record_id": proof_record_id,
+            "review_status": proof_record.review_status,
+            "review_comment": proof_record.preliminary_review_comment or "",
+            "progress_delta": float(proof_record.progress_delta),
+            "increase": float(proof_record.increase),
+        }
+
+
+scheduled_preliminary_review_service = ScheduledPreliminaryReviewService()
+immediate_preliminary_review_service = ImmediatePreliminaryReviewService()
+supplement_preliminary_review_service = SupplementPreliminaryReviewService()

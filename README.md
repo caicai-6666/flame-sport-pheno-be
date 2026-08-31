@@ -13,7 +13,7 @@
 | 登录与用户 | 钉钉企业内部 H5 免登、开发模式本地登录、首次用户与部门初始化及认证缓存 |
 | 赛季参与 | 当前赛季查询、报名期限判断、项目锁定、统一挑战等级锁定和项目完成进度查询 |
 | 凭证管理 | 上传配置查询、JPEG/PNG/WebP 凭证上传、同项目同运动日期重传、当前与历史记录查询、归属校验和 WebP 存储 |
-| 文本初审 | DeepSeek 定时初审、过往赛季待审凭证的管理端立即初审、进度分配与回补、初审失败通知创建 |
+| 文本初审 | DeepSeek 进行中赛季定时初审、当前及历史遗留立即初审、按固化规则执行的补交初审、进度分配与回补、初审失败通知创建 |
 | 结算期补传 | 查询结算中赛季的有效补传资格，按原凭证补交图片与备注，并在事务内消费资格 |
 | 排行榜 | 定时生成当前赛季排行榜快照，统计有效初审或终审通过凭证，并支持通用月初、月末阶段型项目口径 |
 | 积分商城 | 商品查询、用户积分流水查询、并发安全的积分兑换和待发放状态写入 |
@@ -141,7 +141,7 @@ MySQL 容器和完整 Compose 环境分别参见 [MySQL Docker 说明](descripti
 | 钉钉登录与通知 | `DINGTALK_CLIENT_ID`、`DINGTALK_CLIENT_SECRET`、`DINGTALK_AGENT_ID` 及各超时、刷新和检查间隔 |
 | 文本初审 | `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL`、`LLM_PRELIMINARY_REVIEW_*` |
 | 排行榜 | `LEADERBOARD_REFRESH_ENABLED`、`LEADERBOARD_REFRESH_ON_STARTUP`、`LEADERBOARD_REFRESH_INTERVAL_SECONDS` |
-| 图片缓存 | `IMAGE_CACHE_MAX_AGE_SECONDS` |
+| 头像、商品图和项目图标缓存 | `IMAGE_CACHE_MAX_AGE_SECONDS`；运动凭证图片固定禁用缓存 |
 
 `ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS` 按 `Asia/Shanghai` 的赛季开始日 `00:00` 起算。保护期内会拒绝项目锁定、等级锁定、普通凭证上传、结算期补传、商品兑换和首次用户初始化；建议提交仍然允许。
 
@@ -186,7 +186,7 @@ Authorization: auth_code
 | 排行榜刷新 | `LEADERBOARD_REFRESH_ENABLED=true` | 全量刷新当前赛季排行榜快照 |
 | 文本初审 | `LLM_PRELIMINARY_REVIEW_ENABLED=true` | 扫描当前进行中赛季的待初审凭证并更新进度 |
 
-通知采用数据库任务状态流转和至少一次投递语义。定时文本初审只扫描当前进行中赛季；结算中或已结束赛季遗留的 `pending` 凭证由管理端内部接口按凭证 ID 立即初审。
+通知采用数据库任务状态流转和至少一次投递语义。定时文本初审只扫描当前进行中赛季，并在赛季结束前 5 分钟停止；结算开始时的遗留 `pending` 凭证由管理端通用立即入口处理，用户后续补交的凭证使用资格表固化规则从专用入口初审。
 
 ---
 

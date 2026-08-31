@@ -2,17 +2,22 @@
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from app.core.config import settings
 from app.core.database import async_session_factory
 from app.repositories.season_repository import season_repository
 from app.services.leaderboard_service import leaderboard_service
-from app.services.preliminary_review_service import preliminary_review_service
+from app.services.preliminary_review_service import (
+    scheduled_preliminary_review_service,
+)
 
 
 logger = logging.getLogger(__name__)
 _review_task: asyncio.Task[None] | None = None
+SHANGHAI_TIMEZONE = ZoneInfo("Asia/Shanghai")
+STOP_BEFORE_SEASON_END = timedelta(minutes=5)
 
 
 def _validate_scheduler_config() -> None:
@@ -28,16 +33,32 @@ def _build_cutoff_at(now: datetime) -> datetime:
     return now - timedelta(seconds=settings.LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS)
 
 
+def _build_review_stop_at(season_end_date) -> datetime:
+    """按上海时区口径在赛季结束次日零点前 5 分钟停止定时初审。"""
+    return datetime.combine(
+        season_end_date + timedelta(days=1),
+        time.min,
+    ) - STOP_BEFORE_SEASON_END
+
+
 async def _review_once() -> None:
     # 数据库 DATETIME 保存本地时间。最小等待时间留给用户重传，避免刚上传就被模型审核。
-    cutoff_at = _build_cutoff_at(datetime.now())
+    now = datetime.now(SHANGHAI_TIMEZONE).replace(tzinfo=None)
+    cutoff_at = _build_cutoff_at(now)
     async with async_session_factory() as session:
         season = await season_repository.get_current(session=session)
         if season is None or season.id is None:
             logger.info("preliminary review skipped: no active season")
             return
+        if now >= _build_review_stop_at(season.end_date):
+            logger.info(
+                "preliminary review skipped: active season is within final 5 minutes "
+                "season_id=%s",
+                season.id,
+            )
+            return
 
-        summary = await preliminary_review_service.review_pending_current_season(
+        summary = await scheduled_preliminary_review_service.review_pending_active_season(
             session=session,
             season_id=season.id,
             cutoff_at=cutoff_at,

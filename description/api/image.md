@@ -43,6 +43,8 @@ Cache-Control: private, max-age={IMAGE_CACHE_MAX_AGE_SECONDS}
 
 默认值为 `604800`（7 天）。图片接口需要登录态，因此缓存限定为当前浏览器私有缓存，代理和 CDN 等共享缓存不得复用响应。
 
+运动凭证图片不使用该缓存时长。同一凭证重传后仍使用原 `proof_record_id` 对应的固定 URL，因此客户侧与管理侧凭证图片响应都禁止浏览器存储和复用，确保重新读取时返回当前文件。
+
 ---
 
 ## GET `/flame/api/image`
@@ -200,6 +202,9 @@ Authorization: auth_code
 
 ```http
 Content-Type: image/webp
+Cache-Control: private, no-store, no-cache, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
 ```
 
 错误响应：

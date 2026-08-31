@@ -19,7 +19,7 @@
 
 ## GET `/flame/api/supplement/records`
 
-根据当前登录用户查询结算中赛季仍然开放的补传资格，并返回对应原凭证的展示信息。接口只提供查询，不会修改补传资格、审核状态或项目进度。
+根据当前登录用户查询结算中赛季尚未关闭的补传资格，并返回对应原凭证的展示信息。接口只提供查询，不会修改补传资格、审核状态或项目进度。资格在终审通过前保持可见，因此状态 `1`、`2`、`3` 的记录都可能返回。
 
 请求示例：
 
@@ -33,7 +33,7 @@ Authorization: auth_code
 ```text
 season_user.user_id = 当前登录用户 ID
 season.status = 2
-season_supplement_eligibility.status = 1
+season_supplement_eligibility.status != 0
 proof_record.status = 1
 project.status = 1
 season_supplement_eligibility.season_user_id = season_user.id
@@ -145,7 +145,7 @@ Content-Type: multipart/form-data
 主要校验：
 
 - 当前时间不能处于新激活赛季开始后的客户写入保护期。
-- `season_supplement_eligibility.proof_record_id` 必须等于请求中的 `proof_record_id`，且资格状态为 `1`。
+- `season_supplement_eligibility.proof_record_id` 必须等于请求中的 `proof_record_id`，且资格状态不为 `0`。
 - 资格和凭证必须属于当前登录用户，凭证及项目必须可见，所属赛季必须仍处于结算中。
 - 请求中的 `season_id`、`project_id` 和 `proof_date` 必须与资格绑定的原凭证一致。
 - 当前赛季用户必须仍保留该项目的有效锁定记录。
@@ -159,10 +159,10 @@ review_status = pending
 review_comment = NULL
 progress_delta = 0
 increase = 0
-season_supplement_eligibility.status = 0
+season_supplement_eligibility.status = 2
 ```
 
-旧凭证此前占用的项目进度会先释放并尝试回补给同项目其他有效通过凭证。数据库提交失败时，新图片会被清理且资格保持开放；提交成功后才清理旧图片。
+旧凭证此前占用的项目进度会先释放并尝试回补给同项目其他有效通过凭证。数据库提交失败时，新图片会被清理且资格保持原状态；提交成功后才清理旧图片。每次补交都把资格更新为状态 `2` 并重新等待专用初审；状态 `2` 和初审通过后的状态 `3` 仍会出现在列表中，允许用户在终审通过前继续覆盖提交。初审失败后资格恢复为状态 `1`。
 
 错误响应：
 
@@ -172,11 +172,11 @@ season_supplement_eligibility.status = 0
 | `400` | 上传配置不可用 | `当前项目不支持该上传配置` |
 | `400` | 上传配置和凭证类型不匹配 | `project_upload_config_id 与 record_type 不匹配` |
 | `400` | 备注、运动日期或图片不符合普通上传规则 | 与普通凭证上传接口一致 |
-| `409` | 凭证不在当前用户开放的补传资格中、资格已被消费或项目已隐藏 | `当前凭证没有可用的补传资格` |
+| `409` | 凭证不在当前用户未关闭的补传资格中、资格已关闭或项目已隐藏 | `当前凭证没有可用的补传资格` |
 | `409` | 赛季、项目或运动日期与资格绑定的原凭证不一致 | `补传信息与原凭证不一致` |
 | `409` | 原项目锁定记录已经失效 | `用户未锁定该项目` |
 | `409` | 当前处于客户写入保护期 | `赛季开始配置保护期内，暂不允许此操作` |
 
 > **并发规则**
 >
-> 服务会在提交事务中锁定资格与原凭证。同一资格发生并发提交时，只有首个成功事务能够关闭资格，后续请求返回 `409`。
+> 服务会在提交事务中锁定资格与原凭证。同一资格发生并发提交时，请求会串行覆盖同一记录；最后成功提交的完整版本进入待初审。前端仍应避免重复点击，减少无意义的图片写入和审核重试。

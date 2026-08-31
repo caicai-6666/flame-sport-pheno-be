@@ -124,7 +124,7 @@ LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS=300
 PROGRESS_COMPLETION_SNAP_THRESHOLD=0.0001
 ```
 
-`LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS` 必须大于 `0`，默认每 15 分钟扫描一次；`LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS` 默认 `300`，仅审核上传满 5 分钟的待审凭证，为用户重传留出窗口。启用前应确认 `DEEPSEEK_API_KEY` 有效；生产任务会以 DeepSeek V4 非思考模式请求 JSON Output，并为偶发的空内容或截断 JSON 自动重试最多 3 次。任务会向 DeepSeek 发送用户填写的 `note`，月末记录还会发送同项目的月初审核摘要。月初记录所需的身高、体重或其他基线数据必须由用户写入备注；任务不会从用户资料补充这些数据，也不会发送凭证图片、用户 ID、赛季 ID、挑战等级 ID 或其他等级规则。
+`LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS` 必须大于 `0`，默认每 15 分钟扫描一次；`LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS` 默认 `300`，仅审核上传满 5 分钟的待审凭证，为用户重传留出窗口。任务按 `Asia/Shanghai` 判断赛季边界，并在结束日次日 `00:00` 前 5 分钟停止扫描；最后 5 分钟遗留的记录由管理端结算流程调用立即初审。启用前应确认 `DEEPSEEK_API_KEY` 有效；生产任务会以 DeepSeek V4 非思考模式请求 JSON Output，并为偶发的空内容或截断 JSON 自动重试最多 3 次。任务会向 DeepSeek 发送用户填写的 `note`，月末记录还会发送同项目的月初审核摘要。月初记录所需的身高、体重或其他基线数据必须由用户写入备注；任务不会从用户资料补充这些数据，也不会发送凭证图片、用户 ID、赛季 ID、挑战等级 ID 或其他等级规则。
 
 `PROGRESS_COMPLETION_SNAP_THRESHOLD` 控制进度累计后与 `1` 的最大自动补足差额，默认 `0.0001`，可设为 `0` 关闭。该值不得大于数据库四位小数精度的最小单位 `0.0001`，避免提前判定项目完成。
 
@@ -207,8 +207,10 @@ LEADERBOARD_REFRESH_INTERVAL_SECONDS=900
 
 默认每 15 分钟刷新一次；本地调试时可以将 `LEADERBOARD_REFRESH_INTERVAL_SECONDS` 改小，例如 `60`。
 
-图片接口的浏览器私有缓存时长可通过以下配置调整，单位为秒，默认缓存 7 天：
+头像、商品图片和项目图标的浏览器私有缓存时长可通过以下配置调整，单位为秒，默认缓存 7 天：
 
 ```text
 IMAGE_CACHE_MAX_AGE_SECONDS=604800
 ```
+
+运动凭证图片不受该配置影响。由于重传会沿用原凭证 URL，客户侧与管理侧凭证图片固定禁止浏览器缓存。

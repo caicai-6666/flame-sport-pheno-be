@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     LEADERBOARD_REFRESH_ENABLED: bool = True
     LEADERBOARD_REFRESH_ON_STARTUP: bool = True
     LEADERBOARD_REFRESH_INTERVAL_SECONDS: int = 900
-    # 图片接口的浏览器私有缓存时长，单位：秒。
+    # 头像、商品图和项目图标的浏览器私有缓存时长；凭证图片固定不缓存。
     IMAGE_CACHE_MAX_AGE_SECONDS: int = 604800
 
 
