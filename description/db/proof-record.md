@@ -22,6 +22,7 @@
 | project_id     | BIGINT UNSIGNED  |       是 |          无 | 项目 ID，关联 `project.id`             |
 | project_upload_config_id | BIGINT UNSIGNED | 是 | 无 | 项目上传配置 ID，关联 `project_upload_config.id` |
 | image_url      | VARCHAR(500)     |       是 |          无 | 上传图片路径                           |
+| image_segments | JSON | 否 | NULL | 图片分段定位，包含版本、画布尺寸及原图区域 |
 | note           | VARCHAR(255)     |       否 |        NULL | 用户备注                               |
 | proof_date     | DATE             |       是 |          无 | 凭证对应的实际运动日期                 |
 | review_status  | VARCHAR(32)      |       是 |     pending | 初审与终审状态                         |
@@ -143,6 +144,12 @@ MySQL 存储图片路径
 - 如果数据库写入失败，应清理已上传的孤儿文件
 
 ---
+
+### image_segments
+
+可空 JSON，默认 SQL `NULL`，表示未提供定位信息，历史记录保持 `NULL`。对象包含整数 `version`（当前为 `1`）、最终保存图片的像素宽高 `width`、`height`，以及按纵向顺序排列的 `segments` 数组。每个分段包含整数 `x`、`y`、`width`、`height`，表示原图在画布中的矩形区域；原点为最终图片左上角，单位为像素。
+
+该字段与 `image_url` 对应同一版本图片，不保存切片文件路径。
 
 ### note
 
@@ -315,6 +322,7 @@ CREATE TABLE proof_record (
   project_id BIGINT UNSIGNED NOT NULL COMMENT '项目ID',
   project_upload_config_id BIGINT UNSIGNED NOT NULL COMMENT '项目上传配置ID',
   image_url VARCHAR(500) NOT NULL COMMENT '上传图片路径',
+  image_segments JSON DEFAULT NULL COMMENT '图片分段定位，含版本、画布尺寸及原图区域；NULL表示未提供',
   note VARCHAR(255) DEFAULT NULL COMMENT '用户备注',
   proof_date DATE NOT NULL COMMENT '凭证对应的实际运动日期',
   review_status VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT '审核状态：pending待初审，preliminary_approved初审通过，preliminary_rejected初审失败，approved终审通过，rejected终审失败',

@@ -149,7 +149,7 @@ async def review_admin_proof_record_immediately(
     proof_record_id: int,
     session: AsyncSession = Depends(get_session),
 ):
-    """按凭证 ID 立即执行与定时任务相同的文本初审。"""
+    """按凭证 ID 立即执行与定时任务相同的多模态初审。"""
     return await immediate_preliminary_review_service.review_pending_by_id(
         session=session,
         proof_record_id=proof_record_id,

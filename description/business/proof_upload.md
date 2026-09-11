@@ -80,6 +80,7 @@ proof_record.season_user_id
 proof_record.project_id
 proof_record.project_upload_config_id
 proof_record.image_url
+proof_record.image_segments
 proof_record.note
 proof_record.proof_date
 proof_record.review_status = pending（待初审）
@@ -88,7 +89,7 @@ proof_record.status = 1
 proof_record.created_at
 ```
 
-`note` 为必填项。用户应填写本次运动的可审核指标，例如距离、时长、次数、配速或累计爬升；后续文本初审任务以该字段和项目等级规则作为判断输入，不向模型发送凭证图片。
+`note` 为必填项。用户应填写本次运动的可审核指标，例如距离、时长、次数、配速或累计爬升；后续多模态初审以图片为主、备注为辅，结合项目等级规则和赛季日期判断；图片按定位分段后发送给模型，无定位时发送整图。
 
 `proof_date` 为必填日期，表示本次运动实际发生的日期。前端只应展示赛季起止日期至当天之间的可选日期，普通上传默认选择当天；后端仍会校验该日期满足：
 
@@ -112,6 +113,7 @@ season_user_id + project_id + proof_date + status = 1
 
 ```text
 image_url
+image_segments
 note
 project_upload_config_id
 proof_date
@@ -128,7 +130,7 @@ review_comment = NULL
 
 ## 事务和文件清理
 
-接口先保存图片，再写数据库。
+接口先解码图片并校验可选的 `image_segments`，通过后才创建上传目录、保存图片，再将文件名与定位信息一起写入数据库。具体定位格式见[图片分段定位](../api/proof.md#图片分段定位)。重传未带定位时会清空旧值，避免新图片沿用旧坐标。上传只保存整张 WebP 和定位信息；初审工作流根据定位生成内存切片，不另存图片文件。
 
 如果数据库写入失败，后端会删除本次新保存的图片，避免留下孤儿文件。
 

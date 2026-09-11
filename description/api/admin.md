@@ -41,7 +41,7 @@ http://backend:8000/flame/api/admin
 | `GET` | `/flame/api/admin/product` | 根据奖品图片地址读取奖品图片 |
 | `POST` | `/flame/api/admin/product/replace` | 用新奖品图片地址取代旧地址 |
 | `GET` | `/flame/api/admin/proof_record/{proof_record_id}` | 根据凭证记录读取运动凭证图片 |
-| `POST` | `/flame/api/admin/proof_record/{proof_record_id}/preliminary-review` | 按凭证记录立即执行文本初审 |
+| `POST` | `/flame/api/admin/proof_record/{proof_record_id}/preliminary-review` | 按凭证记录立即执行多模态初审 |
 | `POST` | `/flame/api/admin/supplement/{proof_record_id}/preliminary-review` | 使用补传资格快照立即初审补交凭证 |
 
 ---
@@ -417,7 +417,7 @@ Cache-Control: private, no-store
 
 ## POST `/flame/api/admin/proof_record/{proof_record_id}/preliminary-review`
 
-按凭证记录 ID 立即执行与定时任务相同的 DeepSeek 文本初审，并同步写入审核结果、项目进度和初审失败通知。该接口不读取凭证图片，也不要求调用方传递审核结论。
+按凭证记录 ID 立即执行与定时任务相同的 DeepSeek 多模态初审，并同步写入审核结果、项目进度和初审失败通知。该接口读取凭证图片与分段定位并传入工作流，不要求调用方传递审核结论；模型节点将规则、日期、图片和备注发送到 DeepSeek，并校验严格五字段输出。
 
 请求示例：
 
@@ -436,7 +436,7 @@ season_user.level_id IS NOT NULL
 存在凭证关联的 project_upload_config
 ```
 
-该接口按 ID 处理单条凭证，允许进行中、结算中或已结束赛季，不检查 `LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS`。因此管理端可以在赛季进入结算后补审截止前遗留的 `pending` 凭证，也可以处理已结束赛季的历史遗留记录；初审已经完成的记录不会重复审核，未开始赛季不可审核。资格状态为 `2` 的补交记录必须使用补交专用接口，不能从该入口退回实时规则。
+该接口按 ID 处理单条凭证，允许进行中、结算中或已结束赛季，不检查 `LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS`，也不等待定时批量数量阈值。因此管理端可以在赛季进入结算后补审截止前遗留的 `pending` 凭证，也可以处理已结束赛季的历史遗留记录；初审已经完成的记录不会重复审核，未开始赛季不可审核。资格状态为 `2` 的补交记录必须使用补交专用接口，不能从该入口退回实时规则。
 
 成功响应：
 
@@ -452,7 +452,7 @@ season_user.level_id IS NOT NULL
 
 初审失败时同样返回 `200 OK`，其中 `review_status` 为 `preliminary_rejected`，并按统一规则创建待发送通知。只有接口本身无法完成初审时才返回错误。
 
-响应中的 `review_comment` 保持原有字段名，但其值来自 `preliminary_review_comment`。该接口不写终审专用的 `review_comment` 数据库字段。
+响应中的 `review_comment` 保持原有字段名，但其值来自 `preliminary_review_comment`。普通及月末凭证返回模型生成的简短 `comment`；月初凭证还保留完整证据与理由，供月末审核读取基线。该接口不写终审专用的 `review_comment` 数据库字段。
 
 并发处理规则：
 
@@ -471,7 +471,7 @@ season_user.level_id IS NOT NULL
 | `409` | 凭证已不再处于待初审状态 | `凭证当前状态不是待初审` |
 | `409` | 缺少正式参与信息、启用规则或上传配置 | `凭证缺少可用的初审规则或参与信息` |
 | `409` | 模型调用期间凭证被重传或由其他任务完成初审 | `凭证内容或审核状态已变化，请刷新后重试` |
-| `502` | DeepSeek 请求失败或返回内容不符合初审契约 | 对应的模型调用错误 |
+| `502` | 所属赛季缺失或起止日期无效、图片读取或定位校验失败、DeepSeek 请求失败或返回内容不符合初审契约 | 对应的上下文准备或模型调用错误 |
 
 > **警告**
 >
@@ -489,7 +489,7 @@ season_user.level_id IS NOT NULL
 POST /flame/api/admin/supplement/115/preliminary-review
 ```
 
-成功响应与通用立即初审接口一致。初审结果写回和资格状态变更位于同一事务：通过时执行 `2 → 3` 并等待终审，失败时执行 `2 → 1` 并允许用户再次补交；模型异常、并发重传或上下文校验失败时资格保持 `2`。
+成功响应与通用立即初审接口一致。两类入口均使用凭证所属赛季的起止日期（含首尾当日），填写的运动日期超出范围时返回正常的初审不通过结果，增量为 `0`；审核上下文中的所属赛季缺失或日期无效时返回 `502` 并保留待审状态。图片和分段定位按通用入口准备并传入工作流；图片缺失、损坏或定位校验失败返回 `502`，资格状态不变。初审结果写回和资格状态变更位于同一事务：通过时执行 `2 → 3` 并等待终审，失败时执行 `2 → 1` 并允许用户再次补交；模型异常、并发重传或上下文校验失败时资格保持 `2`。
 
 错误响应：
 

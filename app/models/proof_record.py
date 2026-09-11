@@ -1,8 +1,10 @@
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     Column,
     Date,
@@ -108,6 +110,14 @@ class ProofRecord(SQLModel, table=True):
     )
     image_url: str = Field(
         sa_column=Column(String(500), nullable=False, comment="上传图片路径")
+    )
+    image_segments: dict[str, Any] | None = Field(
+        default=None,
+        sa_column=Column(
+            JSON(none_as_null=True),
+            nullable=True,
+            comment="图片分段定位，含版本、画布尺寸及原图区域；NULL表示未提供",
+        ),
     )
     note: str | None = Field(
         default=None,

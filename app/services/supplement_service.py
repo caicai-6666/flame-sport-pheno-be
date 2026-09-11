@@ -5,6 +5,7 @@ from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
+from app.core.image_segments import validate_image_segments
 from app.core.storage import (
     build_proof_record_image_path,
     convert_proof_record_image_to_webp,
@@ -33,6 +34,7 @@ class SupplementService:
         image: UploadFile,
         user_id: str,
         session: AsyncSession,
+        image_segments: str | None = None,
     ) -> dict[str, str]:
         """原位补交一条当前用户在结算赛季仍具备资格的凭证。"""
         # 补交仍属于客户写入，需服从新激活赛季开始后的统一保护期。
@@ -85,14 +87,6 @@ class SupplementService:
                 detail="project_upload_config_id 与 record_type 不匹配",
             )
 
-        uploaded_at = datetime.now()
-        image_path = build_proof_record_image_path(
-            season_id=season_id,
-            user_id=user_id,
-            project_id=project_id,
-            filename=image.filename or "proof",
-            timestamp=uploaded_at,
-        )
         image_bytes = await image.read()
         if not image_bytes:
             raise HTTPException(
@@ -104,12 +98,24 @@ class SupplementService:
                 convert_proof_record_image_to_webp,
                 image_bytes,
             )
+            normalized_image_segments = await run_in_threadpool(
+                validate_image_segments, image_segments, webp_image_bytes,
+            )
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(exc),
             ) from exc
 
+        # 与普通上传一致，先校验最终图片定位，再创建目录及落盘。
+        uploaded_at = datetime.now()
+        image_path = build_proof_record_image_path(
+            season_id=season_id,
+            user_id=user_id,
+            project_id=project_id,
+            filename=image.filename or "proof",
+            timestamp=uploaded_at,
+        )
         old_image_path: Path | None = None
         saved_new_image = False
         try:
@@ -161,6 +167,7 @@ class SupplementService:
                 proof_record=locked_proof_record,
                 project_upload_config_id=project_upload_config_id,
                 image_url=image_path.name,
+                image_segments=normalized_image_segments,
                 note=normalized_note,
                 proof_date=proof_date,
                 uploaded_at=uploaded_at,

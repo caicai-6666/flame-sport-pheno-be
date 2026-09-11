@@ -1,7 +1,9 @@
-"""当前赛季凭证的 DeepSeek 文本初审编排。"""
+"""凭证初审上下文准备、并发执行与结果持久化。"""
 
+import asyncio
 import json
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -9,16 +11,22 @@ from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
-from app.core.deepseek_preliminary_review import (
+from app.agent.preliminary_review import (
     DeepSeekPreliminaryReviewError,
     PreliminaryReviewRequest,
     PreliminaryReviewResult,
-    deepseek_preliminary_review_client,
 )
+from app.agent.preliminary_review.workflow import run_preliminary_review
+from app.core.config import settings
+from app.core.database import async_session_factory
+from app.core.review_image import load_review_image
+
 from app.models.project_rule import ProjectRule
 from app.models.project_upload_config import (
     MONTH_END_RECORD_TYPE,
+    MONTH_START_RECORD_TYPE,
     ProjectUploadConfig,
 )
 from app.models.proof_record import ProofRecord, ProofReviewStatus
@@ -30,6 +38,7 @@ from app.models.project import Project
 from app.repositories.notification_repository import notification_repository
 from app.repositories.proof_record_repository import proof_record_repository
 from app.repositories.season_user_repository import season_user_repository
+from app.repositories.season_repository import season_repository
 from app.repositories.supplement_repository import supplement_repository
 from app.services.leaderboard_service import leaderboard_service
 from app.services.project_progress_service import project_progress_service
@@ -183,48 +192,51 @@ class PreliminaryReviewService:
 
         return response
 
-    async def review_pending_current_season(
+    async def review_pending_groups(
         self,
-        session: AsyncSession,
+        groups: list[list[int]],
         season_id: int,
         cutoff_at: datetime,
     ) -> PreliminaryReviewSummary:
-        """审核指定当前赛季在审核日之前仍待审的所有有效凭证。"""
-        pending_rows = (
-            await proof_record_repository.list_pending_current_season_for_preliminary_review(
-                session=session,
-                season_id=season_id,
-                cutoff_at=cutoff_at,
-            )
-        )
-        # 查询完成即结束事务，不能在调用外部模型期间占用数据库连接或行锁。
-        # async_session_factory 使用 expire_on_commit=False；不能使用 rollback，后者会使
-        # 已取出的 ORM 对象失效，后续访问属性会在异步上下文触发 MissingGreenlet。
-        await session.commit()
+        """不同用户项目并发，同组顺序处理；只在执行单条时读取图片。"""
+        concurrency = settings.LLM_PRELIMINARY_REVIEW_CONCURRENCY
+        if concurrency <= 0:
+            raise ValueError("LLM_PRELIMINARY_REVIEW_CONCURRENCY 必须大于 0")
+        summary = PreliminaryReviewSummary(found_count=sum(map(len, groups)))
+        queue: asyncio.Queue[list[int]] = asyncio.Queue()
+        for group in groups:
+            queue.put_nowait(group)
 
-        summary = PreliminaryReviewSummary(found_count=len(pending_rows))
-        for pending_row in pending_rows:
-            proof_record = pending_row[0]
-            proof_record_id = proof_record.id
-            try:
-                review_result = await self._evaluate_row(
-                    session=session,
-                    pending_row=pending_row,
-                )
-                applied = await self._persist_result(
-                    session=session,
-                    pending_row=pending_row,
-                    review_result=review_result,
-                )
-                if applied:
-                    summary.updated_count += 1
-            except Exception:
-                await session.rollback()
-                summary.failed_count += 1
-                logger.exception(
-                    "preliminary review failed: proof_record_id=%s",
-                    proof_record_id,
-                )
+        async def worker() -> None:
+            while not queue.empty():
+                group = queue.get_nowait()
+                for proof_record_id in group:
+                    # 每条凭证独立会话，回滚不会使其他并发任务或后续记录的 ORM 对象失效。
+                    async with async_session_factory() as item_session:
+                        try:
+                            row = await proof_record_repository.get_pending_record_for_preliminary_review(
+                                session=item_session, proof_record_id=proof_record_id,
+                            )
+                            if row is None:
+                                continue
+                            proof, participant, _, _, _ = row
+                            if participant.season_id != season_id or proof.created_at >= cutoff_at:
+                                continue
+                            await item_session.commit()
+                            result = await self._evaluate_row(session=item_session, pending_row=row)
+                            if await self._persist_result(
+                                session=item_session, pending_row=row, review_result=result,
+                            ):
+                                summary.updated_count += 1
+                        except Exception:
+                            await item_session.rollback()
+                            summary.failed_count += 1
+                            logger.exception("preliminary review failed: proof_record_id=%s", proof_record_id)
+
+        # TaskGroup 在关闭或异常时等待子任务退出，避免遗留后台模型请求。
+        async with asyncio.TaskGroup() as tasks:
+            for _ in range(min(concurrency, len(groups))):
+                tasks.create_task(worker())
         return summary
 
     async def _evaluate_row(
@@ -234,6 +246,13 @@ class PreliminaryReviewService:
         context_snapshot: PreliminaryReviewContextSnapshot | None = None,
     ) -> PreliminaryReviewResult:
         proof_record, season_user, project, rule, upload_config = pending_row
+        # 使用凭证所属赛季，历史立即初审和结算补交不能误用当前激活赛季的日期。
+        season = await season_repository.get_by_id(session=session, season_id=season_user.season_id)
+        if season is None or season.start_date > season.end_date:
+            raise DeepSeekPreliminaryReviewError("凭证所属赛季不存在或起止日期无效")
+        season_start_date, season_end_date = season.start_date, season.end_date
+        if not season_start_date <= proof_record.proof_date <= season_end_date:
+            return self._build_rejected_result("凭证运动日期不在所属赛季期间内。")
         if context_snapshot is None:
             project_name = project.name
             record_type = upload_config.record_type
@@ -257,6 +276,14 @@ class PreliminaryReviewService:
             if not initial_review_comment:
                 return self._build_rejected_result("缺少有效月初记录，无法审核月末结果。")
 
+        # 结束只读事务后在线程池读取图片；等待文件或模型期间不占用数据库连接。
+        image_path = settings.PROOF_RECORD_IMAGE_DIR / str(season_user.season_id) / proof_record.image_url
+        image_segments = proof_record.image_segments
+        await session.commit()
+        try:
+            image = await run_in_threadpool(load_review_image, image_path, image_segments)
+        except (OSError, ValueError) as exc:
+            raise DeepSeekPreliminaryReviewError("凭证图片读取失败或分段定位无效") from exc
         request = PreliminaryReviewRequest(
             project_name=project_name,
             record_type=record_type,
@@ -264,11 +291,12 @@ class PreliminaryReviewService:
             rule_note=rule_note,
             note=proof_record.note or "",
             initial_review_comment=initial_review_comment,
+            proof_date=proof_record.proof_date,
+            season_start_date=season_start_date,
+            season_end_date=season_end_date,
+            image=image,
         )
-        # 月末基线查询结束后再访问模型，避免外部等待时占用数据库事务；提交只读事务
-        # 可保留当前批次的 ORM 快照，rollback 会让其属性过期。
-        await session.commit()
-        return await deepseek_preliminary_review_client.evaluate(request=request)
+        return await run_preliminary_review(request=request)
 
     async def _persist_result(
         self,
@@ -300,12 +328,13 @@ class PreliminaryReviewService:
             if project_lock is None:
                 raise RuntimeError("初审凭证关联的赛季项目不存在或已失效")
 
-        # 条件更新同时校验创建时间和 note，用户重传后不会被旧模型结果覆盖。
+        # 条件更新补充图片文件名校验，文件名变化后不能写回旧图结果。
         updated = await proof_record_repository.update_preliminary_result_if_pending(
             session=session,
             proof_record_id=proof_record.id,
             expected_created_at=proof_record.created_at,
             expected_note=proof_record.note,
+            expected_image_url=proof_record.image_url,
             review_status=review_result.review_status,
             review_comment=review_result.review_comment,
             progress_delta=normalized_progress_delta,
@@ -380,6 +409,7 @@ class PreliminaryReviewService:
                     proof_record_id=proof_record.id,
                     expected_created_at=proof_record.created_at,
                     expected_note=proof_record.note,
+                    expected_image_url=proof_record.image_url,
                     increase=applied_increase,
                     progress_delta=normalized_progress_delta,
                 )
@@ -483,18 +513,33 @@ preliminary_review_service = PreliminaryReviewService()
 
 
 class ScheduledPreliminaryReviewService:
-    """只承接进行中赛季定时批量初审。"""
+    """定时扫描只交接 ID，不跨并发任务共享查询会话或 ORM 对象。"""
+
+    async def list_pending_groups(
+        self, session: AsyncSession, season_id: int, cutoff_at: datetime,
+    ) -> list[list[int]]:
+        rows = await proof_record_repository.list_pending_current_season_for_preliminary_review(
+            session=session, season_id=season_id, cutoff_at=cutoff_at,
+        )
+        groups: dict[tuple[int, int], list[PendingReviewRow]] = defaultdict(list)
+        for row in rows:
+            groups[(row[0].season_user_id, row[0].project_id)].append(row)
+        result = []
+        for group in groups.values():
+            # 月初基线必须先完成并提交，月末任务才可读取；其余记录保持上传顺序。
+            group.sort(key=lambda row: (
+                row[4].record_type != MONTH_START_RECORD_TYPE,
+                row[0].created_at, row[0].id,
+            ))
+            result.append(list(dict.fromkeys(row[0].id for row in group if row[0].id is not None)))
+        await session.commit()
+        return result
 
     async def review_pending_active_season(
-        self,
-        session: AsyncSession,
-        season_id: int,
-        cutoff_at: datetime,
+        self, groups: list[list[int]], season_id: int, cutoff_at: datetime,
     ) -> PreliminaryReviewSummary:
-        return await preliminary_review_service.review_pending_current_season(
-            session=session,
-            season_id=season_id,
-            cutoff_at=cutoff_at,
+        return await preliminary_review_service.review_pending_groups(
+            groups=groups, season_id=season_id, cutoff_at=cutoff_at,
         )
 
 

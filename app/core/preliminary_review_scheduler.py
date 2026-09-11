@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -20,10 +21,44 @@ SHANGHAI_TIMEZONE = ZoneInfo("Asia/Shanghai")
 STOP_BEFORE_SEASON_END = timedelta(minutes=5)
 
 
+@dataclass
+class ReviewBatchGate:
+    """进程内等待计数；只统计非空扫描，不跨轮累加重复凭证数量。"""
+
+    season_id: int | None = None
+    underfilled_scans: int = 0
+
+    def reset(self) -> None:
+        self.season_id = None
+        self.underfilled_scans = 0
+
+    def should_review(self, season_id: int, count: int, minimum: int) -> bool:
+        if season_id != self.season_id:
+            self.reset()
+            self.season_id = season_id
+        if count == 0:
+            self.underfilled_scans = 0
+            return False
+        if count >= minimum:
+            self.underfilled_scans = 0
+            return True
+        self.underfilled_scans += 1
+        if self.underfilled_scans >= 3:
+            self.underfilled_scans = 0
+            return True
+        return False
+
+
+_batch_gate = ReviewBatchGate()
+
+
 def _validate_scheduler_config() -> None:
     """校验间隔与最小等待时间，避免错误配置导致紧密调用模型。"""
     if settings.LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS <= 0:
         raise ValueError("LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS 必须大于 0")
+    for name in ("LLM_PRELIMINARY_REVIEW_MIN_BATCH_SIZE", "LLM_PRELIMINARY_REVIEW_CONCURRENCY"):
+        if getattr(settings, name) <= 0:
+            raise ValueError(f"{name} 必须大于 0")
     if settings.LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS < 0:
         raise ValueError("LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS 不能小于 0")
 
@@ -48,9 +83,11 @@ async def _review_once() -> None:
     async with async_session_factory() as session:
         season = await season_repository.get_current(session=session)
         if season is None or season.id is None:
+            _batch_gate.reset()
             logger.info("preliminary review skipped: no active season")
             return
         if now >= _build_review_stop_at(season.end_date):
+            _batch_gate.reset()
             logger.info(
                 "preliminary review skipped: active season is within final 5 minutes "
                 "season_id=%s",
@@ -58,10 +95,22 @@ async def _review_once() -> None:
             )
             return
 
+        season_id = season.id
+        groups = await scheduled_preliminary_review_service.list_pending_groups(
+            session=session, season_id=season_id, cutoff_at=cutoff_at,
+        )
+        count = sum(map(len, groups))
+        if not _batch_gate.should_review(
+            season_id, count, settings.LLM_PRELIMINARY_REVIEW_MIN_BATCH_SIZE,
+        ):
+            logger.info(
+                "preliminary review waiting: season_id=%s found=%s minimum=%s underfilled_scans=%s",
+                season_id, count, settings.LLM_PRELIMINARY_REVIEW_MIN_BATCH_SIZE,
+                _batch_gate.underfilled_scans,
+            )
+            return
         summary = await scheduled_preliminary_review_service.review_pending_active_season(
-            session=session,
-            season_id=season.id,
-            cutoff_at=cutoff_at,
+            groups=groups, season_id=season_id, cutoff_at=cutoff_at,
         )
         if summary.updated_count:
             # 初审通过后立即刷新快照，避免等到下一次独立排行榜任务才对用户可见。
@@ -80,6 +129,7 @@ async def _review_once_safely() -> None:
     try:
         await _review_once()
     except Exception:
+        _batch_gate.reset()
         logger.exception("scheduled preliminary review failed")
 
 
@@ -102,12 +152,14 @@ def start_preliminary_review_task() -> None:
     except ValueError:
         logger.exception("scheduled preliminary review task is disabled by invalid config")
         return
+    _batch_gate.reset()
     _review_task = asyncio.create_task(_review_loop())
 
 
 async def stop_preliminary_review_task() -> None:
     """停止定时初审任务。"""
     global _review_task
+    _batch_gate.reset()
     if _review_task is None:
         return
     _review_task.cancel()

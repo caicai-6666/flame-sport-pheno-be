@@ -10,6 +10,7 @@ from app.models.season import Season
 from app.repositories.project_repository import project_repository
 from app.repositories.season_repository import season_repository
 from app.repositories.season_user_repository import season_user_repository
+from app.services.season_service import season_service
 from app.services.user_write_guard import ensure_user_write_allowed
 
 
@@ -110,13 +111,15 @@ class ProjectService:
         """锁定当前用户在当前赛季下的项目。"""
         try:
             await ensure_user_write_allowed(session=session)
+            season = await self._get_requested_active_season(
+                session=session,
+                season_id=season_id,
+            )
+            # 写接口独立校验截止时间，避免绕过参与检查或在页面停留后逾期提交。
+            season_service.ensure_participation_period_allowed(season.start_date)
         except Exception:
             await session.rollback()
             raise
-        season = await self._get_requested_active_season(
-            session=session,
-            season_id=season_id,
-        )
 
         project = await project_repository.get_visible_by_id(
             session=session,
@@ -196,13 +199,15 @@ class ProjectService:
         """锁定当前用户在当前赛季下的挑战等级。"""
         try:
             await ensure_user_write_allowed(session=session)
+            season = await self._get_requested_active_season(
+                session=session,
+                season_id=season_id,
+            )
+            # 已锁满项目仍不算报名，截止后不能再通过锁定等级完成参与。
+            season_service.ensure_participation_period_allowed(season.start_date)
         except Exception:
             await session.rollback()
             raise
-        season = await self._get_requested_active_season(
-            session=session,
-            season_id=season_id,
-        )
 
         project_level = await project_repository.get_visible_level_by_id(
             session=session,

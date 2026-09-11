@@ -247,8 +247,34 @@ Content-Type: multipart/form-data
 | `project_upload_config_id` | `number` | 是 | 上传配置 ID，必须大于等于 1 |
 | `record_type` | `string` | 否 | 兼容旧前端字段；传入时需和上传配置记录一致 |
 | `proof_date` | `string` | 是 | 凭证对应的实际运动日期，格式 `YYYY-MM-DD` |
-| `note` | `string` | 是 | 本次运动指标说明，供后续文本初审使用 |
+| `note` | `string` | 是 | 本次运动指标说明，供后续多模态初审使用 |
 | `image` | `File` | 是 | JPEG、PNG 或 WebP 图片；服务端统一存储为 WebP |
+| `image_segments` | `string` | 否 | 分段定位 JSON 字符串，省略或空白时保存为 SQL `NULL` |
+
+### 图片分段定位
+
+`image_segments` 通过 multipart 文本字段提交，UTF-8 编码最多 4096 字节。以下示例表示一张 1440 × 6000 像素图片中的两段原图区域：
+
+```json
+{
+  "version": 1,
+  "width": 1440,
+  "height": 6000,
+  "segments": [
+    {"x": 16, "y": 16, "width": 1408, "height": 2800},
+    {"x": 16, "y": 2832, "width": 1408, "height": 3152}
+  ]
+}
+```
+
+- 对象字段必须与示例一致，不接受额外字段；版本仅支持整数 `1`。
+- 画布宽高必须是正整数，并与服务端修正 EXIF 方向、转换为 WebP 后的实际尺寸一致。
+- `segments` 必须包含 1～5 个矩形；坐标为非负整数，宽高为正整数，不接受布尔值或小数。
+- 矩形必须在画布内，按从上到下的顺序排列且纵向不能重叠；允许边距与间隙。
+
+非法 JSON、尺寸不符、分段越界或其他定位校验失败返回 `400`，不创建本次图片目录或文件，也不更新凭证。省略字段或提交空白字符串兼容旧客户端，JSON 文本 `null` 不属于合法定位对象。同日期重传时定位随图片整体替换，未传定位会清空旧值。接口响应保持原有结构。
+
+### 上传结果与业务校验
 
 成功响应：
 
@@ -283,6 +309,7 @@ season_user_id + project_id + proof_date + status = 1
 
 ```text
 image_url
+image_segments
 note
 project_upload_config_id
 proof_date

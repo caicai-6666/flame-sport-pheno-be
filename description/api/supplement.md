@@ -132,6 +132,9 @@ Content-Type: multipart/form-data
 | `proof_date` | `string` | 是 | 原凭证运动日期，格式为 `YYYY-MM-DD`，补交时不允许改动 |
 | `note` | `string` | 是 | 本次补交的运动指标说明 |
 | `image` | `File` | 是 | JPEG、PNG 或 WebP 图片；服务端统一保存为 WebP |
+| `image_segments` | `string` | 否 | 分段定位 JSON 字符串，省略或空白时保存为 SQL `NULL` |
+
+定位格式及校验与[普通上传的图片分段定位](proof.md#图片分段定位)一致。校验失败返回 `400`，不落盘且不改变补传资格。每次补交都会同步替换图片和定位；未传定位时清空旧值。
 
 成功响应：
 

@@ -8,4 +8,5 @@ greenlet
 python-multipart
 httpx
 openai
+langgraph
 Pillow

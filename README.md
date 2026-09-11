@@ -1,6 +1,6 @@
 # Flame Sport Pheno 客户后端
 
-`flame-sport-pheno-be` 是企业运动赛季平台的客户侧后端服务，基于 FastAPI、SQLModel 和异步 MySQL 构建。它负责钉钉免登、赛季参与、运动凭证、文本初审、排行榜、积分商城、结算期补传、用户通知和本地图片资源等客户业务。
+`flame-sport-pheno-be` 是企业运动赛季平台的客户侧后端服务，基于 FastAPI、SQLModel 和异步 MySQL 构建。它负责钉钉免登、赛季参与、运动凭证、多模态初审、排行榜、积分商城、结算期补传、用户通知和本地图片资源等客户业务。
 
 > **项目状态**
 >
@@ -13,7 +13,7 @@
 | 登录与用户 | 钉钉企业内部 H5 免登、开发模式本地登录、首次用户与部门初始化及认证缓存 |
 | 赛季参与 | 当前赛季查询、报名期限判断、项目锁定、统一挑战等级锁定和项目完成进度查询 |
 | 凭证管理 | 上传配置查询、JPEG/PNG/WebP 凭证上传、同项目同运动日期重传、当前与历史记录查询、归属校验和 WebP 存储 |
-| 文本初审 | DeepSeek 进行中赛季定时初审、当前及历史遗留立即初审、按固化规则执行的补交初审、进度分配与回补、初审失败通知创建 |
+| 多模态初审 | DeepSeek 进行中赛季按数量阈值或第三次不足阈值的非空扫描触发、按用户项目分组并发初审、当前及历史遗留立即初审、按固化规则执行的补交初审、进度分配与回补、初审失败通知创建 |
 | 结算期补传 | 查询结算中赛季的有效补传资格，按原凭证补交图片与备注，并在事务内消费资格 |
 | 排行榜 | 定时生成当前赛季排行榜快照，统计有效初审或终审通过凭证，并支持通用月初、月末阶段型项目口径 |
 | 积分商城 | 商品查询、用户积分流水查询、并发安全的积分兑换和待发放状态写入 |
@@ -27,7 +27,7 @@ flowchart LR
     login[钉钉免登] --> season[获取进行中赛季]
     season --> project[锁定项目与挑战等级]
     project --> proof[上传运动凭证]
-    proof --> review[文本初审]
+    proof --> review[多模态初审]
     review --> progress[更新项目进度与排行榜]
     progress --> settling[赛季进入结算中]
     settling --> supplement[按资格补传]
@@ -43,10 +43,10 @@ flowchart LR
 
 | 边界 | 职责 |
 | --- | --- |
-| 本客户后端 | 客户 API、登录态、凭证与图片存储、文本初审、排行榜快照、积分兑换、通知投递和用户建议 |
+| 本客户后端 | 客户 API、登录态、凭证与图片存储、多模态初审、排行榜快照、积分兑换、通知投递和用户建议 |
 | 独立管理后端 | 赛季与项目配置、人工终审、补传资格管理、赛季结算、积分发放、礼品履约和建议处理 |
 | 钉钉开放平台 | 企业内部应用免登、员工与部门资料、头像来源和 Markdown 工作通知 |
-| DeepSeek | 根据项目规则与用户运动备注生成结构化初审结果；不接收凭证图片和用户 ID |
+| DeepSeek | 根据项目规则、赛季日期、记录图片和用户备注生成严格结构化初审结果；不接收用户 ID |
 | MySQL | 保存用户、赛季参与、凭证、进度、排行榜快照、积分流水、通知和补传资格等业务数据 |
 | 本地资源卷 | 持久化头像、项目图标、商品图片、凭证图片和活动海报 |
 
@@ -72,6 +72,7 @@ router -> service -> repository -> model
 | --- | --- |
 | `app/routers/` | HTTP 路由、参数解析、鉴权和依赖注入 |
 | `app/services/` | 业务校验、跨表流程、事务提交与回滚 |
+| `app/agent/` | 多模态初审节点、严格输出契约、提示词、含图片的输入契约、内存图片切片、上下文消息渲染和已接入业务的 LangGraph 工作流 |
 | `app/repositories/` | 异步查询、关联查询、行锁、写入和 `flush` |
 | `app/models/` | SQLModel 数据表映射 |
 | `app/core/` | 配置、数据库、钉钉、认证缓存、图片存储和后台任务 |
@@ -79,7 +80,7 @@ router -> service -> repository -> model
 | `assets/` | 本地运行期图片资源；生产环境由 Docker 具名卷持久化 |
 | `description/` | 业务、API、数据库和开发运维文档 |
 
-应用启动时会创建缺失的数据表和资源目录，然后按配置启动认证缓存清理、钉钉 token 预热、通知投递、排行榜刷新和文本初审任务。
+应用启动时会创建缺失的数据表和资源目录，然后按配置启动认证缓存清理、钉钉 token 预热、通知投递、排行榜刷新和多模态初审任务。
 
 ---
 
@@ -139,7 +140,7 @@ MySQL 容器和完整 Compose 环境分别参见 [MySQL Docker 说明](descripti
 | 登录缓存 | `AUTH_CACHE_TTL_SECONDS`、`AUTH_CACHE_CLEANUP_INTERVAL_SECONDS` |
 | 赛季规则 | `SEASON_PARTICIPATION_ALLOWED_DAYS`、`ACTIVE_SEASON_CONFIG_EDIT_WINDOW_HOURS` |
 | 钉钉登录与通知 | `DINGTALK_CLIENT_ID`、`DINGTALK_CLIENT_SECRET`、`DINGTALK_AGENT_ID` 及各超时、刷新和检查间隔 |
-| 文本初审 | `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL`、`LLM_PRELIMINARY_REVIEW_*` |
+| 多模态初审 | `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL`、`LLM_PRELIMINARY_REVIEW_*` |
 | 排行榜 | `LEADERBOARD_REFRESH_ENABLED`、`LEADERBOARD_REFRESH_ON_STARTUP`、`LEADERBOARD_REFRESH_INTERVAL_SECONDS` |
 | 头像、商品图和项目图标缓存 | `IMAGE_CACHE_MAX_AGE_SECONDS`；运动凭证图片固定禁用缓存 |
 
@@ -184,9 +185,9 @@ Authorization: auth_code
 | 钉钉 token 预热 | `APP_MODE=production` | 定时刷新企业内部应用 access token |
 | 工作通知投递 | 生产模式且钉钉凭证与 `AgentId` 完整 | 发送 Markdown 通知、查询结果并重试失败任务 |
 | 排行榜刷新 | `LEADERBOARD_REFRESH_ENABLED=true` | 全量刷新当前赛季排行榜快照 |
-| 文本初审 | `LLM_PRELIMINARY_REVIEW_ENABLED=true` | 扫描当前进行中赛季的待初审凭证并更新进度 |
+| 多模态初审 | `LLM_PRELIMINARY_REVIEW_ENABLED=true` | 扫描当前进行中赛季的待初审凭证并更新进度 |
 
-通知采用数据库任务状态流转和至少一次投递语义。定时文本初审只扫描当前进行中赛季，并在赛季结束前 5 分钟停止；结算开始时的遗留 `pending` 凭证由管理端通用立即入口处理，用户后续补交的凭证使用资格表固化规则从专用入口初审。
+通知采用数据库任务状态流转和至少一次投递语义。定时多模态初审只扫描当前进行中赛季，并在赛季结束前 5 分钟停止；结算开始时的遗留 `pending` 凭证由管理端通用立即入口处理，用户后续补交的凭证使用资格表固化规则从专用入口初审。
 
 ---
 

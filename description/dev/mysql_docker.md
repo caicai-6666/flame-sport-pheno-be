@@ -58,6 +58,18 @@ Compose 部署时，后端会使用 Docker 网络中的 `mysql:3306`；宿主机
 
 `SQLModel.metadata.create_all()` 不会为已有表补充字段。对已存在数据库，需要按已部署版本执行相应迁移。
 
+### 凭证图片分段定位
+
+已有数据库应在启动新版上传服务前执行一次迁移，先确认 `proof_record` 尚无 `image_segments` 字段。在后端仓库根目录、使用本地开发容器时执行：
+
+```bash
+docker exec -i flame-sport-pheno-mysql sh -c \
+  'MYSQL_PWD="$MYSQL_PASSWORD" mysql --default-character-set=utf8mb4 -u"$MYSQL_USER" "$MYSQL_DATABASE"' \
+  < scripts/migrations/20260911_add_proof_record_image_segments.sql
+```
+
+[迁移脚本](../../scripts/migrations/20260911_add_proof_record_image_segments.sql)仅新增可空 JSON 字段，历史凭证保留 SQL `NULL`，不修改图片文件。脚本不能重复执行；新建表由更新后的 Model 创建该字段。
+
 ### 补交初审上下文快照
 
 部署补交专用初审前，先备份数据库并执行顶层部署目录中的

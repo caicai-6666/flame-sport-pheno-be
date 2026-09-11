@@ -21,6 +21,7 @@ async def upload_supplement_proof(
     proof_date: date = Form(...),
     note: str = Form(...),
     image: UploadFile = File(...),
+    image_segments: str | None = Form(default=None),
     user_id: str = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_session),
 ):
@@ -34,6 +35,7 @@ async def upload_supplement_proof(
         proof_date=proof_date,
         note=note,
         image=image,
+        image_segments=image_segments,
         user_id=user_id,
         session=session,
     )

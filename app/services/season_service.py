@@ -78,7 +78,7 @@ class SeasonService:
         if season_user is not None and season_user.level_id is not None:
             return {"project_rule_level_id": season_user.level_id}
 
-        self._ensure_participation_period_allowed(season.start_date)
+        self.ensure_participation_period_allowed(season.start_date)
 
         if season_user is None or season_user.level_id is None:
             raise HTTPException(
@@ -86,15 +86,16 @@ class SeasonService:
                 detail="用户尚未正式参与该赛季",
             )
 
-    def _ensure_participation_period_allowed(self, start_date: date) -> None:
+    def ensure_participation_period_allowed(self, start_date: date) -> None:
         """校验当前日期是否仍处于允许参与赛季的时间范围内。"""
-        today = date.today()
+        today = datetime.now(BUSINESS_TIMEZONE).date()
         # 已被后台提前激活、但尚未到开始日的赛季允许用户抢先参与。
         if start_date > today:
             return
 
         days_since_start = (today - start_date).days
-        if days_since_start > settings.SEASON_PARTICIPATION_ALLOWED_DAYS:
+        # 开始日计入报名窗口；日期差达到 N 时即截止，与配置保护期统一使用上海时区。
+        if days_since_start >= settings.SEASON_PARTICIPATION_ALLOWED_DAYS:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="已超过赛季报名时间",

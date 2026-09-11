@@ -43,12 +43,14 @@ class Settings(BaseSettings):
     DINGTALK_NOTIFICATION_CHECK_INTERVAL_SECONDS: int = 60
     DEEPSEEK_API_KEY: str | None = None
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
-    DEEPSEEK_MODEL: str = "deepseek-v4-flash"
+    DEEPSEEK_MODEL: str = "deepseek-flash"
     DEEPSEEK_HTTP_TIMEOUT_SECONDS: float = 60.0
     # 初审任务默认关闭，避免仅配置密钥后即在部署环境产生模型调用费用。
     LLM_PRELIMINARY_REVIEW_ENABLED: bool = False
     LLM_PRELIMINARY_REVIEW_INTERVAL_SECONDS: int = 900
     LLM_PRELIMINARY_REVIEW_MIN_AGE_SECONDS: int = 300
+    LLM_PRELIMINARY_REVIEW_MIN_BATCH_SIZE: int = 10
+    LLM_PRELIMINARY_REVIEW_CONCURRENCY: int = 3
     # 补偿多次四位小数增量累计产生的尾差；0 表示关闭自动补足。
     PROGRESS_COMPLETION_SNAP_THRESHOLD: Decimal = Field(
         default=Decimal("0.0001"),

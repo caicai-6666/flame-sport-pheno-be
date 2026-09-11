@@ -66,7 +66,7 @@
 | --- | --- |
 | [鉴权业务说明](business/authentication.md) | 生产与开发登录、钉钉同步和认证缓存 |
 | [凭证上传业务说明](business/proof_upload.md) | 凭证保存、重传、查询和文件清理 |
-| [审核与积分说明](business/review_and_points.md) | 文本初审、终审、排行榜和积分结算 |
+| [审核与积分说明](business/review_and_points.md) | 多模态初审、终审、排行榜和积分结算 |
 | [钉钉工作通知投递](business/notifications.md) | 通用 Markdown、异步投递状态和失败重试 |
 | [赛季与项目选择流程](business/season_project_flow.md) | 赛季参与、项目锁定和挑战等级选择 |
 | [商城业务说明](business/shop.md) | 积分查询、商品展示和兑换规则 |

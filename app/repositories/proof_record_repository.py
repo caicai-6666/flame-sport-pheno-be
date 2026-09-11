@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Any
 
 from decimal import Decimal
 
@@ -152,6 +153,7 @@ class ProofRecordRepository:
         proof_record_id: int,
         expected_created_at: datetime,
         expected_note: str | None,
+        expected_image_url: str,
         review_status: ProofReviewStatus,
         review_comment: str,
         progress_delta: Decimal,
@@ -164,6 +166,7 @@ class ProofRecordRepository:
             .where(ProofRecord.review_status == ProofReviewStatus.PENDING.value)
             .where(ProofRecord.created_at == expected_created_at)
             .where(ProofRecord.note == expected_note)
+            .where(ProofRecord.image_url == expected_image_url)
             .values(
                 review_status=review_status.value,
                 preliminary_review_comment=review_comment,
@@ -180,6 +183,7 @@ class ProofRecordRepository:
         proof_record_id: int,
         expected_created_at: datetime,
         expected_note: str | None,
+        expected_image_url: str,
         increase: Decimal,
         progress_delta: Decimal | None = None,
     ) -> bool:
@@ -197,6 +201,7 @@ class ProofRecordRepository:
             )
             .where(ProofRecord.created_at == expected_created_at)
             .where(ProofRecord.note == expected_note)
+            .where(ProofRecord.image_url == expected_image_url)
             .values(**values)
         )
         result = await session.execute(statement)
@@ -309,6 +314,7 @@ class ProofRecordRepository:
         note: str | None,
         proof_date: date,
         created_at: datetime,
+        image_segments: dict[str, Any] | None = None,
     ) -> ProofRecord:
         """创建凭证记录。"""
         proof_record = ProofRecord(
@@ -316,6 +322,7 @@ class ProofRecordRepository:
             project_id=project_id,
             project_upload_config_id=project_upload_config_id,
             image_url=image_url,
+            image_segments=image_segments,
             note=note,
             proof_date=proof_date,
             review_status=ProofReviewStatus.PENDING.value,

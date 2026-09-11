@@ -2,12 +2,14 @@ from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from time import monotonic
+from typing import Any
 
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
+from app.core.image_segments import validate_image_segments
 from app.core.storage import (
     build_proof_record_image_path,
     convert_proof_record_image_to_webp,
@@ -81,6 +83,7 @@ class ProofService:
         image: UploadFile,
         user_id: str,
         session: AsyncSession,
+        image_segments: str | None = None,
     ) -> dict[str, str]:
         """上传或更新当前用户指定运动日期的项目凭证。"""
         # 必须先判断保护期，避免拒绝请求仍创建赛季目录或处理上传图片。
@@ -150,15 +153,6 @@ class ProofService:
                 detail="project_upload_config_id 与 record_type 不匹配",
             )
 
-        uploaded_at = datetime.now()
-        image_path = build_proof_record_image_path(
-            season_id=season_id,
-            user_id=user_id,
-            project_id=project_id,
-            filename=image.filename or "proof",
-            timestamp=uploaded_at,
-        )
-        image_url = self._build_proof_record_image_url(image_path)
         image_bytes = await image.read()
         if not image_bytes:
             raise HTTPException(
@@ -171,12 +165,25 @@ class ProofService:
                 convert_proof_record_image_to_webp,
                 image_bytes,
             )
+            normalized_image_segments = await run_in_threadpool(
+                validate_image_segments, image_segments, webp_image_bytes,
+            )
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(exc),
             ) from exc
 
+        # 定位通过校验后才创建目录和保存文件，非法定位不能产生落盘副作用。
+        uploaded_at = datetime.now()
+        image_path = build_proof_record_image_path(
+            season_id=season_id,
+            user_id=user_id,
+            project_id=project_id,
+            filename=image.filename or "proof",
+            timestamp=uploaded_at,
+        )
+        image_url = self._build_proof_record_image_url(image_path)
         old_image_path: Path | None = None
         saved_new_image = False
         try:
@@ -210,6 +217,7 @@ class ProofService:
                 project_id=project_id,
                 project_upload_config_id=project_upload_config_id,
                 image_url=image_url,
+                image_segments=normalized_image_segments,
                 note=normalized_note,
                 proof_date=proof_date,
                 uploaded_at=uploaded_at,
@@ -340,6 +348,7 @@ class ProofService:
         uploaded_at: datetime,
         season_id: int,
         project_lock: SeasonUserProject,
+        image_segments: dict[str, Any] | None = None,
     ) -> Path | None:
         """创建或更新同项目同运动日期的唯一有效凭证记录。"""
         proof_record = await proof_record_repository.get_active_record_by_proof_date(
@@ -355,6 +364,7 @@ class ProofService:
                 project_id=project_id,
                 project_upload_config_id=project_upload_config_id,
                 image_url=image_url,
+                image_segments=image_segments,
                 note=note,
                 proof_date=proof_date,
                 created_at=uploaded_at,
@@ -366,6 +376,7 @@ class ProofService:
             proof_record=proof_record,
             project_upload_config_id=project_upload_config_id,
             image_url=image_url,
+            image_segments=image_segments,
             note=note,
             proof_date=proof_date,
             uploaded_at=uploaded_at,
@@ -384,6 +395,7 @@ class ProofService:
         uploaded_at: datetime,
         season_id: int,
         project_lock: SeasonUserProject,
+        image_segments: dict[str, Any] | None = None,
     ) -> Path | None:
         """用新提交内容原位覆盖凭证，并释放旧版本已经占用的项目进度。"""
         old_image_path = self.resolve_existing_proof_image_path(
@@ -395,6 +407,8 @@ class ProofService:
         released_increase = proof_record.increase
         proof_record.project_upload_config_id = project_upload_config_id
         proof_record.image_url = image_url
+        # 定位与图片属于同一版本；旧客户端未传定位时必须清空，不能沿用旧图坐标。
+        proof_record.image_segments = image_segments
         proof_record.note = note
         proof_record.review_status = ProofReviewStatus.PENDING.value
         proof_record.review_comment = None
