@@ -60,15 +60,20 @@ Compose 部署时，后端会使用 Docker 网络中的 `mysql:3306`；宿主机
 
 ### 凭证图片分段定位
 
-已有数据库应在启动新版上传服务前执行一次迁移，先确认 `proof_record` 尚无 `image_segments` 字段。在后端仓库根目录、使用本地开发容器时执行：
+已有数据库应在启动新版上传服务前备份 `proof_record`，并确认尚无 `image_segments` 字段。MySQL 8.4 可执行以下增量 SQL，不能对生产库重新导入包含 `DROP TABLE` 的整库初始化文件：
 
-```bash
-docker exec -i flame-sport-pheno-mysql sh -c \
-  'MYSQL_PWD="$MYSQL_PASSWORD" mysql --default-character-set=utf8mb4 -u"$MYSQL_USER" "$MYSQL_DATABASE"' \
-  < scripts/migrations/20260911_add_proof_record_image_segments.sql
+```sql
+SET SESSION lock_wait_timeout = 10;
+ALTER TABLE proof_record
+  ADD COLUMN image_segments JSON DEFAULT NULL
+    COMMENT '图片分段定位，含版本、画布尺寸及原图区域；NULL表示未提供'
+    AFTER image_url,
+  ALGORITHM=INSTANT;
 ```
 
-[迁移脚本](../../scripts/migrations/20260911_add_proof_record_image_segments.sql)仅新增可空 JSON 字段，历史凭证保留 SQL `NULL`，不修改图片文件。脚本不能重复执行；新建表由更新后的 Model 创建该字段。
+仅新增可空 JSON 字段，历史凭证保留 SQL `NULL` 并按整图审核，不修改图片文件。SQL 不能重复执行；新建表由 Model 或同级 `flame-sport-pheno-deploy/mysql/init/001_flame_sport_pheno.sql` 创建该字段。迁移 SQL 在此完整维护，不依赖已排除 Git 追踪的 `scripts/` 目录。
+
+2026 年 9 月 11 日生产库已完成该迁移：执行前对凭证表结构和数据做一致性备份；执行后字段类型为 JSON、可空且默认 SQL `NULL`，迁移前后均为 676 条记录，历史分段字段全部为 `NULL`。备份位于服务器部署目录的 `backups/proof_record_before_image_segments_20260911_181921.sql`。本次未重启服务，也未改写审核状态、进度或意见。
 
 ### 补交初审上下文快照
 
