@@ -45,18 +45,12 @@ def render_review_messages(
         ])
 
     content: list[ChatCompletionContentPartParam] = []
-    # 阶段型凭证按原赛季边界注入审核日期，不改变上传日期字段或原始请求。
-    review_date = request.proof_date
+    # 阶段型仅提供赛季范围，不注入必须匹配的运动日期。
     if request.record_type in {MONTH_START_RECORD_TYPE, MONTH_END_RECORD_TYPE}:
         if request.season_start_date is None or request.season_end_date is None:
             raise ValueError("月初、月末初审必须提供赛季起止日期")
-        review_date = (
-            request.season_start_date
-            if request.record_type == MONTH_START_RECORD_TYPE
-            else request.season_end_date
-        )
-    if review_date is not None:
-        content.append({"type": "text", "text": f"运动日期：{review_date.isoformat()}"})
+    elif request.proof_date is not None:
+        content.append({"type": "text", "text": f"运动日期：{request.proof_date.isoformat()}"})
     for image in images:
         content.append({
             "type": "text",
