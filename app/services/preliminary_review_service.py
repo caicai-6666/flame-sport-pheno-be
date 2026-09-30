@@ -352,15 +352,20 @@ class PreliminaryReviewService:
         if review_result.review_status == ProofReviewStatus.PRELIMINARY_APPROVED:
             if project_lock is None:
                 raise RuntimeError("初审凭证缺少项目锁")
-            replaced_records = (
-                await proof_record_repository.list_same_proof_date_preliminary_approved_records(
-                    session=session,
-                    season_user_id=season_user.id,
-                    project_id=proof_record.project_id,
-                    proof_date=proof_record.proof_date,
-                    excluded_proof_record_id=proof_record.id,
+            # 阶段型凭证在上传时按类型覆盖，同日月初和月末必须同时保留。
+            replaced_records = []
+            if (record_type_override or upload_config.record_type) not in {
+                MONTH_START_RECORD_TYPE, MONTH_END_RECORD_TYPE,
+            }:
+                replaced_records = (
+                    await proof_record_repository.list_same_proof_date_preliminary_approved_records(
+                        session=session,
+                        season_user_id=season_user.id,
+                        project_id=proof_record.project_id,
+                        proof_date=proof_record.proof_date,
+                        excluded_proof_record_id=proof_record.id,
+                    )
                 )
-            )
             if replaced_records:
                 # 同项目同运动日期只保留最新版本；旧版本释放的实际贡献优先回补给
                 # 更早上传且因封顶未完全分配进度的有效凭证。

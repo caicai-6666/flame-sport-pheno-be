@@ -3,7 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.models.project import Project
-from app.models.project_upload_config import ProjectUploadConfig
+from app.models.project_upload_config import (
+    MONTH_START_RECORD_TYPE, MONTH_END_RECORD_TYPE, ProjectUploadConfig,
+)
 from app.models.proof_record import ProofRecord, ProofReviewStatus
 from app.models.season import Season, SeasonStatus
 from app.models.season_supplement_eligibility import (
@@ -27,7 +29,7 @@ class SupplementRepository:
         Season,
         Project,
     ] | None:
-        """按凭证 ID 查询当前用户尚未终审通过的结算赛季补传资格。"""
+        """查询开放的补传资格，排除已初审或终审通过的阶段记录。"""
         statement = (
             select(
                 SeasonSupplementEligibility,
@@ -50,6 +52,15 @@ class SupplementRepository:
                 ),
             )
             .join(Project, Project.id == ProofRecord.project_id)
+            .join(ProjectUploadConfig, ProjectUploadConfig.id == ProofRecord.project_upload_config_id)
+            # 已通过的阶段记录不可补交，也不能通过换成普通配置绕过限制。
+            .where(~and_(
+                ProjectUploadConfig.record_type.in_((MONTH_START_RECORD_TYPE, MONTH_END_RECORD_TYPE)),
+                ProofRecord.review_status.in_((
+                    ProofReviewStatus.PRELIMINARY_APPROVED.value,
+                    ProofReviewStatus.APPROVED.value,
+                )),
+            ))
             .where(SeasonUser.user_id == user_id)
             .where(Season.status == SeasonStatus.SETTLING)
             .where(SeasonSupplementEligibility.proof_record_id == proof_record_id)
@@ -62,7 +73,7 @@ class SupplementRepository:
         )
         if for_update:
             # 串行化同一资格的覆盖提交，确保最后成功提交的版本完整落库。
-            statement = statement.with_for_update()
+            statement = statement.with_for_update().execution_options(populate_existing=True)
         result = await session.execute(statement)
         return result.one_or_none()
 
@@ -101,6 +112,15 @@ class SupplementRepository:
                 ),
             )
             .join(Project, Project.id == ProofRecord.project_id)
+            .join(ProjectUploadConfig, ProjectUploadConfig.id == ProofRecord.project_upload_config_id)
+            # 已通过的阶段记录不可补交，也不能通过换成普通配置绕过限制。
+            .where(~and_(
+                ProjectUploadConfig.record_type.in_((MONTH_START_RECORD_TYPE, MONTH_END_RECORD_TYPE)),
+                ProofRecord.review_status.in_((
+                    ProofReviewStatus.PRELIMINARY_APPROVED.value,
+                    ProofReviewStatus.APPROVED.value,
+                )),
+            ))
             .where(SeasonUser.user_id == user_id)
             .where(Season.status == SeasonStatus.SETTLING)
             .where(

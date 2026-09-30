@@ -16,7 +16,9 @@ from app.core.storage import (
     save_proof_record_image,
 )
 from app.models.project import Project
-from app.models.project_upload_config import ProjectUploadConfig
+from app.models.project_upload_config import (
+    MONTH_START_RECORD_TYPE, MONTH_END_RECORD_TYPE, ProjectUploadConfig,
+)
 from app.models.proof_record import ProofRecord, ProofReviewStatus
 from app.models.season import Season, SeasonStatus
 from app.models.season_user_project import SeasonUserProject
@@ -187,7 +189,7 @@ class ProofService:
         old_image_path: Path | None = None
         saved_new_image = False
         try:
-            # 锁定赛季用户行，避免并发上传时同时写入同项目同运动日期的凭证。
+            # 锁定赛季用户和项目，串行执行按日期或阶段的判重，避免并发创建重复凭证。
             locked_season_user = await season_user_repository.lock_by_id(
                 session=session,
                 season_user_id=season_user.id,
@@ -211,7 +213,7 @@ class ProofService:
             # 保存文件后写数据库；如果数据库失败，会删除本次新文件避免残留。
             save_proof_record_image(path=image_path, content=webp_image_bytes)
             saved_new_image = True
-            old_image_path = await self._create_or_update_proof_record_for_date(
+            old_image_path = await self._create_or_update_proof_record(
                 session=session,
                 season_user_id=season_user.id,
                 project_id=project_id,
@@ -223,6 +225,7 @@ class ProofService:
                 uploaded_at=uploaded_at,
                 season_id=season_id,
                 project_lock=locked_project,
+                record_type=upload_config.record_type,
             )
             await session.commit()
         except HTTPException:
@@ -336,7 +339,7 @@ class ProofService:
             return proof_record.review_comment or ""
         return ""
 
-    async def _create_or_update_proof_record_for_date(
+    async def _create_or_update_proof_record(
         self,
         session: AsyncSession,
         season_user_id: int,
@@ -348,15 +351,23 @@ class ProofService:
         uploaded_at: datetime,
         season_id: int,
         project_lock: SeasonUserProject,
+        record_type: str,
         image_segments: dict[str, Any] | None = None,
     ) -> Path | None:
-        """创建或更新同项目同运动日期的唯一有效凭证记录。"""
-        proof_record = await proof_record_repository.get_active_record_by_proof_date(
-            session=session,
-            season_user_id=season_user_id,
-            project_id=project_id,
-            proof_date=proof_date,
-        )
+        """阶段型凭证按类型覆盖，普通凭证按日期覆盖；调用方已持有用户和项目锁。"""
+        if record_type in {MONTH_START_RECORD_TYPE, MONTH_END_RECORD_TYPE}:
+            records = await proof_record_repository.list_active_records_by_record_type(
+                session=session, season_user_id=season_user_id,
+                project_id=project_id, record_type=record_type,
+            )
+            proof_record = records[0] if records else None
+        else:
+            proof_record = await proof_record_repository.get_active_record_by_proof_date(
+                session=session,
+                season_user_id=season_user_id,
+                project_id=project_id,
+                proof_date=proof_date,
+            )
         if proof_record is None:
             await proof_record_repository.create(
                 session=session,
@@ -382,6 +393,7 @@ class ProofService:
             uploaded_at=uploaded_at,
             season_id=season_id,
             project_lock=project_lock,
+            record_type=record_type,
         )
 
     async def replace_existing_proof_record(
@@ -395,6 +407,7 @@ class ProofService:
         uploaded_at: datetime,
         season_id: int,
         project_lock: SeasonUserProject,
+        record_type: str,
         image_segments: dict[str, Any] | None = None,
     ) -> Path | None:
         """用新提交内容原位覆盖凭证，并释放旧版本已经占用的项目进度。"""
@@ -403,8 +416,29 @@ class ProofService:
             new_image_url=image_url,
             season_id=season_id,
         )
-        # 重传必须先释放旧记录的实际贡献；终审通过记录也不能遗留旧进度。
+        # 允许重传时先释放实际贡献，普通凭证终审通过后的覆盖也不能遗留旧进度。
         released_increase = proof_record.increase
+        excluded_ids = [proof_record.id] if proof_record.id else []
+        if record_type in {MONTH_START_RECORD_TYPE, MONTH_END_RECORD_TYPE}:
+            records = await proof_record_repository.list_active_records_by_record_type(
+                session=session, season_user_id=proof_record.season_user_id,
+                project_id=proof_record.project_id, record_type=record_type,
+            )
+            # 任一历史同阶段记录通过审核后都禁止覆盖，不能用较新的待审记录绕过。
+            if any(record.review_status in {
+                ProofReviewStatus.PRELIMINARY_APPROVED.value,
+                ProofReviewStatus.APPROVED.value,
+            } for record in records):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="该阶段凭证已初审通过或终审通过，不允许再次上传",
+                )
+            duplicates = [record for record in records if record.id != proof_record.id]
+            duplicate_ids = [record.id for record in duplicates if record.id is not None]
+            # 历史同阶段重复记录在本次上传事务中软失效；先累计旧贡献，避免被清零后漏扣。
+            released_increase += sum((record.increase for record in duplicates), Decimal("0.0000"))
+            await proof_record_repository.deactivate_records(session=session, proof_record_ids=duplicate_ids)
+            excluded_ids.extend(duplicate_ids)
         proof_record.project_upload_config_id = project_upload_config_id
         proof_record.image_url = image_url
         # 定位与图片属于同一版本；旧客户端未传定位时必须清空，不能沿用旧图坐标。
@@ -424,7 +458,7 @@ class ProofService:
             season_user_id=proof_record.season_user_id,
             project_id=proof_record.project_id,
             released_increase=released_increase,
-            excluded_proof_record_ids=[proof_record.id] if proof_record.id else None,
+            excluded_proof_record_ids=excluded_ids,
         )
         return old_image_path
 

@@ -173,8 +173,9 @@ class SupplementService:
                 uploaded_at=uploaded_at,
                 season_id=season_id,
                 project_lock=locked_project,
+                record_type=upload_config.record_type,
             )
-            # 终审通过前资格始终可重复补传；每次新版本都回到待补交初审，
+            # 允许覆盖的记录每次都回到待补交初审；已通过的阶段记录已被拦截，
             # 旧的模型或终审结果会被凭证版本与状态校验丢弃。
             eligibility.status = (
                 SupplementEligibilityStatus.PENDING_PRELIMINARY_REVIEW

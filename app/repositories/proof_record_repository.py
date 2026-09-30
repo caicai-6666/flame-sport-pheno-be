@@ -11,6 +11,7 @@ from app.models.project import Project
 from app.models.project_rule import ProjectRule
 from app.models.project_upload_config import (
     MONTH_START_RECORD_TYPE,
+    MONTH_END_RECORD_TYPE,
     ProjectUploadConfig,
 )
 from app.models.proof_record import ProofRecord, ProofReviewStatus
@@ -215,9 +216,11 @@ class ProofRecordRepository:
         proof_date: date,
         excluded_proof_record_id: int | None = None,
     ) -> list[ProofRecord]:
-        """查询同运动日期的有效初审通过记录，兼容迁移前的重复数据。"""
+        """查询同运动日期的有效普通初审通过记录，兼容迁移前的重复数据。"""
         statement = (
             select(ProofRecord)
+            .join(ProjectUploadConfig, ProjectUploadConfig.id == ProofRecord.project_upload_config_id)
+            .where(ProjectUploadConfig.record_type.not_in((MONTH_START_RECORD_TYPE, MONTH_END_RECORD_TYPE)))
             .where(ProofRecord.season_user_id == season_user_id)
             .where(ProofRecord.project_id == project_id)
             .where(ProofRecord.status == 1)
@@ -284,6 +287,27 @@ class ProofRecordRepository:
         result = await session.execute(statement)
         return list(result.scalars().all())
 
+    async def list_active_records_by_record_type(
+        self,
+        session: AsyncSession,
+        season_user_id: int,
+        project_id: int,
+        record_type: str,
+    ) -> list[ProofRecord]:
+        """锁定同阶段有效记录；旧配置仍参与判重，并刷新会话缓存以读取最新审核状态。"""
+        result = await session.execute(
+            select(ProofRecord)
+            .join(ProjectUploadConfig, ProjectUploadConfig.id == ProofRecord.project_upload_config_id)
+            .where(ProofRecord.season_user_id == season_user_id)
+            .where(ProofRecord.project_id == project_id)
+            .where(ProofRecord.status == 1)
+            .where(ProjectUploadConfig.record_type == record_type)
+            .order_by(ProofRecord.created_at.desc(), ProofRecord.id.desc())
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
+
     async def get_active_record_by_proof_date(
         self,
         session: AsyncSession,
@@ -291,9 +315,11 @@ class ProofRecordRepository:
         project_id: int,
         proof_date: date,
     ) -> ProofRecord | None:
-        """查询用户同项目同运动日期的唯一有效凭证记录。"""
+        """查询用户同项目同运动日期的有效普通凭证记录。"""
         result = await session.execute(
             select(ProofRecord)
+            .join(ProjectUploadConfig, ProjectUploadConfig.id == ProofRecord.project_upload_config_id)
+            .where(ProjectUploadConfig.record_type.not_in((MONTH_START_RECORD_TYPE, MONTH_END_RECORD_TYPE)))
             .where(ProofRecord.season_user_id == season_user_id)
             .where(ProofRecord.project_id == project_id)
             .where(ProofRecord.status == 1)
